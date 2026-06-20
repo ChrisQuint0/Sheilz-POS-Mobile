@@ -45,6 +45,8 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
 
       <FlatList
         data={cart}
+        contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
+        showsVerticalScrollIndicator={true}
         keyExtractor={(item) => item.item.id}
         renderItem={({ item }) => (
           <View style={styles.cartItem}>
@@ -107,8 +109,6 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
 const styles = StyleSheet.create({
   cartContainer: { 
     flex: 1, 
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.lg,
     backgroundColor: COLORS.surface,
   },
   headerRow: {
@@ -116,6 +116,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'baseline',
     marginBottom: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
   },
   cartHeader: {
     fontSize: TYPOGRAPHY.sizes.xl,
@@ -198,6 +200,8 @@ const styles = StyleSheet.create({
   },
   cartFooter: {
     paddingTop: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.lg,
     marginTop: "auto",
   },
   cartTotalRow: {
