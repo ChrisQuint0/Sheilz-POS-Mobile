@@ -1,8 +1,13 @@
 import React from "react";
 import { createDrawerNavigator } from "@react-navigation/drawer";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { View, Text, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, TYPOGRAPHY } from "../constants/theme";
+
+// Auth Screens
+import SplashScreen from "../screens/auth/SplashScreen";
+import LoginScreen from "../screens/auth/LoginScreen";
 
 // Import Custom Drawer
 import CustomDrawer from "../components/navigation/CustomDrawer";
@@ -13,9 +18,13 @@ import POSScreen from "../screens/pos/POSScreen";
 // Import Tickets Screen
 import TicketsScreen from "../screens/pos/TicketsScreen";
 
-const Drawer = createDrawerNavigator();
+// Store
+import { usePOSStore } from "../store/usePOSStore";
 
-export default function AppNavigator() {
+const Drawer = createDrawerNavigator();
+const Stack = createNativeStackNavigator();
+
+function MainDrawerNavigator() {
   return (
     <Drawer.Navigator
       initialRouteName="Orders"
@@ -66,5 +75,23 @@ export default function AppNavigator() {
         }}
       />
     </Drawer.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  const { isAuthenticated, hasFinishedSplash } = usePOSStore();
+
+  if (!hasFinishedSplash) {
+    return <SplashScreen />;
+  }
+
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+      {!isAuthenticated ? (
+        <Stack.Screen name="Login" component={LoginScreen} />
+      ) : (
+        <Stack.Screen name="Main" component={MainDrawerNavigator} />
+      )}
+    </Stack.Navigator>
   );
 }

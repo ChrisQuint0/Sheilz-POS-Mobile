@@ -37,6 +37,13 @@ export interface Order {
 }
 
 interface POSState {
+  // Auth & Boot
+  hasFinishedSplash: boolean;
+  setHasFinishedSplash: (finished: boolean) => void;
+  isAuthenticated: boolean;
+  login: () => void;
+  logout: () => void;
+
   // Navigation & Filtering
   activeCategory: string;
   setActiveCategory: (category: string) => void;
@@ -78,6 +85,12 @@ const getTodayString = () => {
 };
 
 export const usePOSStore = create<POSState>((set, get) => ({
+  hasFinishedSplash: false,
+  setHasFinishedSplash: (finished) => set({ hasFinishedSplash: finished }),
+  isAuthenticated: false,
+  login: () => set({ isAuthenticated: true }),
+  logout: () => set({ isAuthenticated: false }),
+
   activeCategory: 'All',
   setActiveCategory: (category) => set({ activeCategory: category }),
   
