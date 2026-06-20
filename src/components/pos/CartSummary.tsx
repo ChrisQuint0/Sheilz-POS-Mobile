@@ -5,15 +5,18 @@ import { usePOSStore } from '../../store/usePOSStore';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import AppText from '../ui/AppText';
 import PaymentModal from './PaymentModal';
+import ConfirmModal from '../ui/ConfirmModal';
 
 interface CartSummaryProps {
   onChargeComplete?: () => void;
+  onClearComplete?: () => void;
 }
 
-export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
-  const { cart, addToCart, decrementCartItem, removeFromCart, placeOrder, generateOrderNumber } = usePOSStore();
+export default function CartSummary({ onChargeComplete, onClearComplete }: CartSummaryProps) {
+  const { cart, addToCart, decrementCartItem, removeFromCart, clearCart, placeOrder, generateOrderNumber } = usePOSStore();
   const [orderNumber, setOrderNumber] = useState('');
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
+  const [isClearModalVisible, setIsClearModalVisible] = useState(false);
 
   // Generate order number when cart becomes non-empty
   useEffect(() => {
@@ -45,10 +48,19 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
   return (
     <View style={styles.cartContainer}>
       <View style={styles.headerRow}>
-        <AppText style={styles.cartHeader}>Current Order</AppText>
-        {orderNumber ? (
-          <AppText style={styles.orderNumber}>#{orderNumber}</AppText>
-        ) : null}
+        <View style={styles.headerTitles}>
+          <AppText style={styles.cartHeader}>Current Order</AppText>
+          {orderNumber ? (
+            <AppText style={styles.orderNumber}>#{orderNumber}</AppText>
+          ) : null}
+        </View>
+
+        {cart.length > 0 && (
+          <TouchableOpacity onPress={() => setIsClearModalVisible(true)} style={styles.clearBtn}>
+            <Ionicons name="trash-outline" size={16} color={COLORS.roseDeep} />
+            <AppText style={styles.clearBtnText}>Clear All</AppText>
+          </TouchableOpacity>
+        )}
       </View>
 
       <FlatList
@@ -128,6 +140,21 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
         onClose={() => setIsPaymentModalVisible(false)}
         onConfirm={handlePaymentConfirm}
       />
+
+      <ConfirmModal
+        visible={isClearModalVisible}
+        title="Clear Entire Order?"
+        message="Are you sure you want to remove all items from the current order? This action cannot be undone."
+        confirmText="Clear Order"
+        onCancel={() => setIsClearModalVisible(false)}
+        onConfirm={() => {
+          clearCart();
+          setIsClearModalVisible(false);
+          if (onClearComplete) {
+            onClearComplete();
+          }
+        }}
+      />
     </View>
   );
 }
@@ -140,10 +167,15 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
+    alignItems: 'center',
     marginBottom: SPACING.md,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
+  },
+  headerTitles: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 2,
   },
   cartHeader: {
     fontSize: TYPOGRAPHY.sizes.xl,
@@ -154,6 +186,20 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.sm,
     fontWeight: TYPOGRAPHY.weights.semibold,
     color: COLORS.stone400,
+  },
+  clearBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.roseBlushSoft,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  clearBtnText: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    fontWeight: TYPOGRAPHY.weights.bold,
+    color: COLORS.roseDeep,
   },
   emptyState: {
     alignItems: 'center',

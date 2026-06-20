@@ -46,6 +46,10 @@ export default function POSScreen() {
     setIsSuccessVisible(true);
   };
 
+  const handleClearComplete = () => {
+    setIsCartModalVisible(false);
+  };
+
   const handleProductSelect = (item: MenuItem) => {
     setSelectedProduct(item);
     setIsOptionModalVisible(true);
@@ -104,7 +108,7 @@ export default function POSScreen() {
         {/* TABLET RIGHT SIDEBAR CART */}
         {isTablet && (
           <View style={[styles.sidebarRight, { paddingBottom: insets.bottom }]}>
-            <CartSummary onChargeComplete={handleChargeComplete} />
+            <CartSummary onChargeComplete={handleChargeComplete} onClearComplete={handleClearComplete} />
           </View>
         )}
 
@@ -130,7 +134,7 @@ export default function POSScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              <CartSummary onChargeComplete={handleChargeComplete} />
+              <CartSummary onChargeComplete={handleChargeComplete} onClearComplete={handleClearComplete} />
             </View>
           </KeyboardAvoidingView>
         </Modal>
