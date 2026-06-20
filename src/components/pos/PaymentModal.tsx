@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Modal, TouchableOpacity, Platform, Image } from 'react-native';
+import { View, StyleSheet, Modal, TouchableOpacity, Platform, Image, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import AppText from '../ui/AppText';
@@ -8,7 +8,7 @@ interface PaymentModalProps {
   visible: boolean;
   totalAmount: number;
   onClose: () => void;
-  onConfirm: (method: string) => void;
+  onConfirm: (method: string, customerName?: string) => void;
 }
 
 const PAYMENT_METHODS = [
@@ -20,16 +20,19 @@ const PAYMENT_METHODS = [
 
 export default function PaymentModal({ visible, totalAmount, onClose, onConfirm }: PaymentModalProps) {
   const [selectedMethod, setSelectedMethod] = useState<typeof PAYMENT_METHODS[0] | null>(null);
+  const [customerName, setCustomerName] = useState('');
 
   const handleClose = () => {
     setSelectedMethod(null);
+    setCustomerName('');
     onClose();
   };
 
   const handleConfirm = () => {
     if (selectedMethod) {
-      onConfirm(selectedMethod.id);
+      onConfirm(selectedMethod.id, customerName.trim());
       setSelectedMethod(null);
+      setCustomerName('');
     }
   };
   return (
@@ -83,6 +86,15 @@ export default function PaymentModal({ visible, totalAmount, onClose, onConfirm 
                   <Ionicons name={selectedMethod.icon as any} size={48} color={COLORS.primary} />
                 )}
               </View>
+
+              <TextInput
+                style={styles.nameInput}
+                placeholder="Customer Name (Optional)"
+                placeholderTextColor={COLORS.textLight}
+                value={customerName}
+                onChangeText={setCustomerName}
+              />
+
               <AppText style={styles.confirmPrompt}>
                 Proceed with {selectedMethod.label} payment?
               </AppText>
@@ -214,6 +226,17 @@ const styles = StyleSheet.create({
   selectedMethodLogo: {
     width: 50,
     height: 50,
+  },
+  nameInput: {
+    width: '100%',
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.stone200,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    fontSize: TYPOGRAPHY.sizes.md,
+    color: COLORS.espresso,
+    marginBottom: SPACING.lg,
   },
   confirmPrompt: {
     fontSize: TYPOGRAPHY.sizes.md,

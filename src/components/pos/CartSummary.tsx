@@ -11,7 +11,7 @@ interface CartSummaryProps {
 }
 
 export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
-  const { cart, addToCart, decrementCartItem, removeFromCart, clearCart, generateOrderNumber } = usePOSStore();
+  const { cart, addToCart, decrementCartItem, removeFromCart, placeOrder, generateOrderNumber } = usePOSStore();
   const [orderNumber, setOrderNumber] = useState('');
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
 
@@ -30,10 +30,12 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
     setIsPaymentModalVisible(true);
   };
 
-  const handlePaymentConfirm = (method: string) => {
+  const handlePaymentConfirm = (method: string, customerName?: string) => {
     setIsPaymentModalVisible(false);
-    // You could save the payment method to your backend here
-    clearCart();
+    
+    // Save order
+    placeOrder(method, orderNumber, customerName);
+    
     setOrderNumber('');
     if (onChargeComplete) {
       onChargeComplete();
@@ -64,7 +66,7 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
                     {[
                       item.options.size !== 'One Size' ? item.options.size : null,
                       item.options.temp !== 'None' ? item.options.temp : null,
-                      item.options.addon ? 'Extra Honey' : null
+                      item.options.addon ? 'Honey' : null
                     ].filter(Boolean).join(' • ')}
                   </AppText>
                 )}

@@ -1,6 +1,6 @@
 import React from "react";
 import { createDrawerNavigator } from "@react-navigation/drawer";
-import { View, Text } from "react-native";
+import { View, Text, Platform } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { COLORS, TYPOGRAPHY } from "../constants/theme";
 
@@ -10,12 +10,8 @@ import CustomDrawer from "../components/navigation/CustomDrawer";
 // Import your new POS Screen
 import POSScreen from "../screens/pos/POSScreen";
 
-// A temporary placeholder for your Tickets screen
-const TicketsScreen = () => (
-  <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-    <Text style={{ fontSize: 20 }}>Tickets Screen Coming Soon</Text>
-  </View>
-);
+// Import Tickets Screen
+import TicketsScreen from "../screens/pos/TicketsScreen";
 
 const Drawer = createDrawerNavigator();
 
@@ -55,6 +51,17 @@ export default function AppNavigator() {
         name="Tickets" 
         component={TicketsScreen} 
         options={{
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="receipt-outline" size={20} color={COLORS.espresso} />
+              <Text style={{ 
+                fontSize: 18, 
+                fontWeight: 'bold', 
+                color: COLORS.espresso, 
+                fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }) 
+              }}>Order Tickets</Text>
+            </View>
+          ),
           drawerIcon: ({ color, size }) => <Ionicons name="receipt-outline" size={size} color={color} />
         }}
       />

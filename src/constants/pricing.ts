@@ -9,6 +9,12 @@ export interface ProductConfig {
 }
 
 export const PRICING_RULES: Record<string, ProductConfig> = {
+  'Tea': {
+    sizes: ['One Size'],
+    temps: ['Hot', 'Cold'],
+    prices: { 'One Size': { 'Hot': 55, 'Cold': 55 }, '12oz': {}, '16oz': {} },
+    hasAddon: { name: 'Honey', price: 10 }
+  },
   'Brewed': {
     sizes: ['16oz'],
     temps: ['Hot'],
@@ -85,6 +91,36 @@ export const PRICING_RULES: Record<string, ProductConfig> = {
     sizes: ['12oz', '16oz'], temps: ['Cold'],
     prices: { '12oz': { 'Cold': 120 }, '16oz': { 'Cold': 130 }, 'One Size': {} }
   },
+
+  // Limited Time
+  'Blueberry Macha': {
+    sizes: ['12oz', '16oz'], temps: ['Cold'],
+    prices: { '12oz': { 'Cold': 170 }, '16oz': { 'Cold': 180 }, 'One Size': {} }
+  },
+  'Blueberry Milk': {
+    sizes: ['12oz', '16oz'], temps: ['Cold'],
+    prices: { '12oz': { 'Cold': 100 }, '16oz': { 'Cold': 110 }, 'One Size': {} }
+  },
+  'Blueberry Soda': {
+    sizes: ['12oz', '16oz'], temps: ['Cold'],
+    prices: { '12oz': { 'Cold': 89 }, '16oz': { 'Cold': 99 }, 'One Size': {} }
+  },
+  'White Mocha': {
+    sizes: ['12oz', '16oz'], temps: ['Cold'],
+    prices: { '12oz': { 'Cold': 150 }, '16oz': { 'Cold': 160 }, 'One Size': {} }
+  },
+  'Honey Uji Matcha': {
+    sizes: ['12oz', '16oz'], temps: ['Cold'],
+    prices: { '12oz': { 'Cold': 180 }, '16oz': { 'Cold': 190 }, 'One Size': {} }
+  },
+  'Seasalt Caramel': {
+    sizes: ['12oz', '16oz'], temps: ['Cold'],
+    prices: { '12oz': { 'Cold': 150 }, '16oz': { 'Cold': 160 }, 'One Size': {} }
+  },
+  'Velvet Vanilla': {
+    sizes: ['12oz', '16oz'], temps: ['Cold'],
+    prices: { '12oz': { 'Cold': 150 }, '16oz': { 'Cold': 160 }, 'One Size': {} }
+  },
 };
 
 const SPARKLING_DRINKS = [
@@ -99,12 +135,6 @@ SPARKLING_DRINKS.forEach(drink => {
   };
 });
 
-PRICING_RULES['Honey Tea'] = {
-  sizes: ['One Size'],
-  temps: ['None'],
-  prices: { 'One Size': { 'None': 100 }, '12oz': {}, '16oz': {} },
-  hasAddon: { name: 'Extra Honey', price: 10 }
-};
 
 export const getProductPrice = (productName: string, size: Size, temp: Temp, hasAddon: boolean): number | null => {
   const config = PRICING_RULES[productName];

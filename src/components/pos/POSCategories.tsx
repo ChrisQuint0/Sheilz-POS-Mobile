@@ -11,6 +11,7 @@ const CATEGORIES = [
   "Sparkling",
   "Tea",
   "Pastries",
+  "Limited Time",
 ];
 
 export default function POSCategories() {

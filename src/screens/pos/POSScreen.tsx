@@ -47,21 +47,6 @@ export default function POSScreen() {
   };
 
   const handleProductSelect = (item: MenuItem) => {
-    const config = PRICING_RULES[item.name];
-    if (!config) {
-      addToCart(item, undefined, item.price);
-      return;
-    }
-
-    if (config.sizes.length === 1 && config.temps.length === 1 && !config.hasAddon) {
-      const size = config.sizes[0];
-      const temp = config.temps[0];
-      const price = getProductPrice(item.name, size, temp, false);
-      addToCart(item, { size, temp, addon: false }, price || item.price);
-      showToast(`Added ${item.name} to order`);
-      return;
-    }
-
     setSelectedProduct(item);
     setIsOptionModalVisible(true);
   };

@@ -17,11 +17,23 @@ export interface CartItemOptions {
 }
 
 export interface CartItem {
-  cartItemId: string; // Unique combination of id+size+temp+addon
+  cartItemId: string; // Unique ID to separate identical items with different configs
   item: MenuItem;
   options?: CartItemOptions;
   unitPrice: number;
   quantity: number;
+}
+
+export type OrderStatus = 'Current' | 'Completed' | 'Voided (Not Made)' | 'Voided (Consumed)';
+
+export interface Order {
+  id: string; // Order number (e.g., #0001)
+  items: CartItem[];
+  totalAmount: number;
+  paymentMethod: string;
+  customerName?: string;
+  status: OrderStatus;
+  timestamp: string;
 }
 
 interface POSState {
@@ -40,7 +52,7 @@ interface POSState {
 
   // Cart
   cart: CartItem[];
-  addToCart: (item: MenuItem, options?: CartItemOptions, unitPrice?: number) => void;
+  addToCart: (item: MenuItem, options?: CartItemOptions, unitPrice?: number, quantity?: number) => void;
   removeFromCart: (cartItemId: string) => void;
   decrementCartItem: (cartItemId: string) => void;
   clearCart: () => void;
@@ -53,6 +65,11 @@ interface POSState {
   // User Profile
   cashierName: string;
   setCashierName: (name: string) => void;
+
+  // Orders
+  orders: Order[];
+  placeOrder: (paymentMethod: string, orderNumber: string, customerName?: string) => void;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
 }
 
 const getTodayString = () => {
@@ -75,7 +92,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
   hideToast: () => set({ toastMessage: null }),
 
   cart: [],
-  addToCart: (item, options, unitPrice) => set((state) => {
+  addToCart: (item, options, unitPrice, quantity = 1) => set((state) => {
     // Generate unique ID based on options
     const optionStr = options ? `${options.size || ''}-${options.temp || ''}-${options.addon ? 'addon' : ''}` : 'no-options';
     const cartItemId = `${item.id}-${optionStr}`;
@@ -85,11 +102,11 @@ export const usePOSStore = create<POSState>((set, get) => ({
     if (existing) {
       return {
         cart: state.cart.map((c) =>
-          c.cartItemId === cartItemId ? { ...c, quantity: c.quantity + 1 } : c
+          c.cartItemId === cartItemId ? { ...c, quantity: c.quantity + quantity } : c
         ),
       };
     }
-    return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity: 1 }] };
+    return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity }] };
   }),
 
   removeFromCart: (cartItemId) => set((state) => ({
@@ -137,4 +154,24 @@ export const usePOSStore = create<POSState>((set, get) => ({
 
   cashierName: 'Joshua T.',
   setCashierName: (name) => set({ cashierName: name }),
+
+  orders: [],
+  placeOrder: (paymentMethod, orderNumber, customerName) => set((state) => {
+    const newOrder: Order = {
+      id: orderNumber,
+      items: [...state.cart],
+      totalAmount: state.cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0),
+      paymentMethod,
+      customerName: customerName || undefined,
+      status: 'Current',
+      timestamp: new Date().toISOString(),
+    };
+    return {
+      orders: [newOrder, ...state.orders], // Prepended so newest is first
+      cart: [], // Clear the cart
+    };
+  }),
+  updateOrderStatus: (orderId, status) => set((state) => ({
+    orders: state.orders.map(o => o.id === orderId ? { ...o, status } : o)
+  })),
 }));

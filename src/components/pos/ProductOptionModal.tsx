@@ -17,15 +17,22 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
   const [size, setSize] = useState<Size | null>(null);
   const [temp, setTemp] = useState<Temp | null>(null);
   const [addon, setAddon] = useState(false);
+  const [quantity, setQuantity] = useState(1);
 
   const config = item ? PRICING_RULES[item.name] : null;
   const slideAnim = useRef(new Animated.Value(500)).current;
 
   useEffect(() => {
-    if (visible && config) {
-      setSize(config.sizes.length === 1 ? config.sizes[0] : null);
-      setTemp(config.temps.length === 1 ? config.temps[0] : null);
+    if (visible && item) {
+      if (config) {
+        setSize(config.sizes.length === 1 ? config.sizes[0] : null);
+        setTemp(config.temps.length === 1 ? config.temps[0] : null);
+      } else {
+        setSize(null);
+        setTemp(null);
+      }
       setAddon(false);
+      setQuantity(1);
       
       slideAnim.setValue(500);
       Animated.spring(slideAnim, {
@@ -34,7 +41,7 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
         bounciness: 4,
       }).start();
     }
-  }, [visible, config]);
+  }, [visible, item, config]);
 
   const handleClose = () => {
     Animated.timing(slideAnim, {
@@ -53,18 +60,25 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
     }
   }, [size, config]);
 
-  if (!item || !config) return null;
+  if (!item) return null;
 
-  const currentPrice = getProductPrice(item.name, size as Size, temp as Temp, addon);
-  const isValid = size && (temp || config.temps.includes('None'));
+  const currentPrice = config ? getProductPrice(item.name, size as Size, temp as Temp, addon) : item.price;
+  const isValid = config ? (size && (temp || config.temps.includes('None'))) : true;
 
   const handleAdd = () => {
     if (isValid && currentPrice !== null) {
-      addToCart(item, { size, temp: temp as Temp, addon }, currentPrice);
-      showToast(`Added ${item.name} to order`);
+      addToCart(
+        item, 
+        config ? { size: size as Size, temp: temp as Temp, addon } : undefined, 
+        currentPrice, 
+        quantity
+      );
+      showToast(`Added ${quantity}x ${item.name} to order`);
       handleClose();
     }
   };
+
+  const totalPrice = (currentPrice || 0) * quantity;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
@@ -78,7 +92,7 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
           </View>
 
           {/* Size Selection */}
-          {config.sizes[0] !== 'One Size' && (
+          {config && config.sizes[0] !== 'One Size' && (
             <View style={styles.section}>
               <AppText style={styles.sectionTitle}>Size</AppText>
               <View style={styles.optionsRow}>
@@ -101,7 +115,7 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
           )}
 
           {/* Temperature Selection */}
-          {config.temps[0] !== 'None' && config.temps.length > 1 && size === '16oz' && (
+          {config && config.temps[0] !== 'None' && config.temps.length > 1 && size === '16oz' && (
             <View style={styles.section}>
               <AppText style={styles.sectionTitle}>Temperature</AppText>
               <View style={styles.optionsRow}>
@@ -119,7 +133,7 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
           )}
 
           {/* 12oz Cold Feedback */}
-          {config.temps.length > 1 && size === '12oz' && (
+          {config && config.temps.length > 1 && size === '12oz' && (
             <View style={styles.feedbackBox}>
               <Ionicons name="snow-outline" size={16} color={COLORS.textLight} />
               <AppText style={styles.feedbackText}>12oz is only available iced/cold.</AppText>
@@ -127,7 +141,7 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
           )}
 
           {/* Addons */}
-          {config.hasAddon && (
+          {config?.hasAddon && (
             <View style={styles.section}>
               <AppText style={styles.sectionTitle}>Add-ons</AppText>
               <View style={styles.optionsRow}>
@@ -143,10 +157,30 @@ export default function ProductOptionModal({ visible, item, onClose }: ProductOp
             </View>
           )}
 
+          {/* Quantity Selection */}
+          <View style={styles.section}>
+            <AppText style={styles.sectionTitle}>Quantity</AppText>
+            <View style={styles.quantityContainer}>
+              <TouchableOpacity 
+                style={styles.qtyBtn} 
+                onPress={() => setQuantity(Math.max(1, quantity - 1))}
+              >
+                <Ionicons name="remove" size={24} color={COLORS.espresso} />
+              </TouchableOpacity>
+              <AppText style={styles.qtyValue}>{quantity}</AppText>
+              <TouchableOpacity 
+                style={styles.qtyBtn} 
+                onPress={() => setQuantity(quantity + 1)}
+              >
+                <Ionicons name="add" size={24} color={COLORS.espresso} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Footer */}
           <View style={styles.footer}>
             <AppText style={styles.price}>
-              {currentPrice ? `₱${currentPrice.toFixed(2)}` : 'Select options'}
+              {currentPrice ? `₱${totalPrice.toFixed(2)}` : 'Select options'}
             </AppText>
             <TouchableOpacity
               style={[styles.addBtn, !isValid && styles.addBtnDisabled]}
@@ -233,6 +267,28 @@ const styles = StyleSheet.create({
   feedbackText: {
     color: COLORS.textLight,
     fontSize: TYPOGRAPHY.sizes.sm,
+  },
+  quantityContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  qtyBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.stone100,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.stone200,
+  },
+  qtyValue: {
+    fontSize: TYPOGRAPHY.sizes.xl,
+    fontWeight: TYPOGRAPHY.weights.bold,
+    color: COLORS.espresso,
+    minWidth: 32,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',
