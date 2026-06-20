@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sheilz Coffee — Brand Palette v2</title>
+<style>
+  :root{
+    --primary: #C2456A;
+    --primary-light: #E8839E;
+    --primary-bg: #FBE4EA;
+    --accent: #E08A4F;
+    --accent-bg: #FCE5D2;
+    --ink: #3A2B27;
+    --ink-soft: #826F69;
+    --cream: #FFFBF8;
+    --surface: #FFFFFF;
+    --border: #F0DCE2;
+    --success: #4F9A5C;
+    --success-bg: #E2F2E4;
+    --error: #D6485E;
+    --error-bg: #FBE5E9;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+    line-height:1.55;
+  }
+  .wrap{max-width:1040px;margin:0 auto;padding:48px 28px 96px;}
+  h1{font-size:30px;font-weight:700;margin:0 0 6px;}
+  .sub{color:var(--ink-soft);font-size:15px;margin:0 0 40px;}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);font-weight:700;margin:0 0 16px;border-bottom:1px solid var(--border);padding-bottom:10px;}
+  section{margin-bottom:56px;}
+
+  /* swatches */
+  .swatch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;}
+  .swatch{border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--surface);}
+  .swatch .fill{height:72px;}
+  .swatch .label{padding:10px 12px;}
+  .swatch .name{font-size:13px;font-weight:700;margin:0 0 2px;}
+  .swatch .hex{font-size:12px;color:var(--ink-soft);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 2px;}
+  .swatch .role{font-size:11.5px;color:var(--ink-soft);margin:0;}
+
+  /* note box */
+  .note{background:var(--surface);border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:10px;padding:16px 20px;font-size:14px;color:var(--ink);}
+  .note strong{color:var(--primary);}
+
+  /* UI sample */
+  .app{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;color:var(--ink);}
+  .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--primary);}
+  .navlinks{display:flex;gap:22px;font-size:14px;color:var(--ink-soft);}
+  .navlinks a{color:var(--ink-soft);text-decoration:none;}
+  .navlinks a.active{color:var(--primary);font-weight:700;}
+  .cart-btn{background:var(--primary);color:#fff;border:none;padding:9px 18px;border-radius:999px;font-size:13.5px;font-weight:700;cursor:pointer;}
+
+  .hero{padding:40px 24px;background:var(--primary-bg);display:flex;gap:28px;align-items:center;flex-wrap:wrap;}
+  .hero-text{flex:1;min-width:240px;}
+  .eyebrow{display:inline-block;background:var(--accent-bg);color:#9A5320;font-size:11.5px;font-weight:700;letter-spacing:.04em;padding:5px 11px;border-radius:999px;margin-bottom:12px;}
+  .hero h3{font-size:24px;margin:0 0 8px;}
+  .hero p{font-size:14px;color:var(--ink-soft);margin:0 0 18px;max-width:380px;}
+  .btn-primary{background:var(--primary);color:#fff;border:none;padding:11px 22px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;}
+  .btn-secondary{background:transparent;color:var(--primary);border:1.5px solid var(--primary-light);padding:10px 20px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-left:10px;}
+
+  .menu-section{padding:32px 24px;}
+  .menu-section h4{font-size:17px;margin:0 0 16px;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;}
+  .card{border:1px solid var(--border);border-radius:14px;padding:16px;background:var(--surface);}
+  .card .tag{display:inline-block;font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;margin-bottom:10px;}
+  .tag.bestseller{background:var(--accent-bg);color:#9A5320;}
+  .tag.new{background:var(--success-bg);color:#2E6B3A;}
+  .card .item-swatch{height:84px;border-radius:10px;margin-bottom:12px;background:var(--primary-light);}
+  .card h5{font-size:14.5px;margin:0 0 4px;}
+  .card .desc{font-size:12.5px;color:var(--ink-soft);margin:0 0 12px;}
+  .card .row{display:flex;justify-content:space-between;align-items:center;}
+  .card .price{font-weight:700;font-size:14.5px;}
+  .add-btn{background:var(--primary);color:#fff;border:none;width:30px;height:30px;border-radius:50%;font-size:17px;cursor:pointer;line-height:1;}
+
+  .alerts{padding:0 24px 32px;display:flex;flex-direction:column;gap:10px;}
+  .alert{border-radius:10px;padding:12px 16px;font-size:13.5px;display:flex;gap:10px;align-items:flex-start;}
+  .alert.success{background:var(--success-bg);color:#2E6B3A;}
+  .alert.error{background:var(--error-bg);color:var(--error);}
+  .alert.info{background:var(--accent-bg);color:#9A5320;}
+
+  .footer-cta{background:var(--ink);color:#F3E9E6;padding:28px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;}
+  .footer-cta p{margin:0;font-size:14px;}
+  .footer-cta .link{color:var(--primary-light);font-weight:700;text-decoration:none;font-size:14px;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:18px;font-size:12.5px;color:var(--ink-soft);}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Sheilz Coffee — Brand palette v2</h1>
+  <p class="sub">Same dusty-rose identity from the logo, restructured around how UI color actually gets used: one interactive primary with proper contrast, a warm secondary accent, true neutrals for text and surfaces, and semantic colors for system states.</p>
+
+  <section>
+    <h2>Why the original read "brownish"</h2>
+    <div class="note">
+      <strong>The hue was never brown</strong> — sampling the logo's outer ring gives <code>#B8807F</code>, a genuinely muted rose. It looked brownish because it was likely doing double duty as both the decorative ring color <em>and</em> the UI's text/button color. Industry-standard practice never lets one saturated brand tone carry every job — text needs near-black neutrals, buttons need a contrast-safe shade, and backgrounds need to stay light and quiet. Splitting that single color into proper roles is what fixes the "brown" perception without changing the brand's actual pink identity.
+    </div>
+  </section>
+
+  <section>
+    <h2>Core palette</h2>
+    <div class="swatch-grid">
+      <div class="swatch">
+        <div class="fill" style="background:#C2456A"></div>
+        <div class="label"><p class="name">Primary (interactive)</p><p class="hex">#C2456A</p><p class="role">Buttons, links, active nav — a true vibrant raspberry-rose, still AA-safe with white text (4.8:1)</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#E8839E"></div>
+        <div class="label"><p class="name">Primary, light</p><p class="hex">#E8839E</p><p class="role">Badges, illustrations, hover fills — pair with dark text only</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#FBE4EA"></div>
+        <div class="label"><p class="name">Primary, tint</p><p class="hex">#FBE4EA</p><p class="role">Hero/section backgrounds, selected states</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#E08A4F"></div>
+        <div class="label"><p class="name">Accent (secondary)</p><p class="hex">#E08A4F</p><p class="role">From the logo's florals/sparkles — tags, highlights, second CTA</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#3A2B27"></div>
+        <div class="label"><p class="name">Ink (text)</p><p class="hex">#3A2B27</p><p class="role">Body copy, headings — from the logo's lettering, used for text only</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#826F69"></div>
+        <div class="label"><p class="name">Ink, soft</p><p class="hex">#826F69</p><p class="role">Secondary text, captions, placeholders</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#FFFBF8;border-bottom:1px solid #F0DCE2"></div>
+        <div class="label"><p class="name">Cream (page bg)</p><p class="hex">#FFFBF8</p><p class="role">App/page background — kept near-white, not beige, so colors stay crisp</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#FFFFFF;border-bottom:1px solid #F0DCE2"></div>
+        <div class="label"><p class="name">Surface (cards)</p><p class="hex">#FFFFFF</p><p class="role">Cards, modals, inputs — sits on cream</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#F0DCE2"></div>
+        <div class="label"><p class="name">Border</p><p class="hex">#F0DCE2</p><p class="role">Dividers, card outlines, input borders</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#4F9A5C"></div>
+        <div class="label"><p class="name">Success</p><p class="hex">#4F9A5C</p><p class="role">Confirmations — a clear, fresh green that still sits comfortably with the pink</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#D6485E"></div>
+        <div class="label"><p class="name">Error</p><p class="hex">#D6485E</p><p class="role">Validation errors, destructive actions</p></div>
+      </div>
+      <div class="swatch">
+        <div class="fill" style="background:#9A5320"></div>
+        <div class="label"><p class="name">Accent, text-safe</p><p class="hex">#9A5320</p><p class="role">Text on accent-tinted backgrounds (tags, info banners)</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Applied to a real UI</h2>
+    <div class="app">
+      <div class="topbar">
+        <div class="brand"><span class="dot"></span> Sheilz Coffee</div>
+        <div class="navlinks">
+          <a href="#" class="active">Menu</a>
+          <a href="#">Rewards</a>
+          <a href="#">Locations</a>
+          <a href="#">About</a>
+        </div>
+        <button class="cart-btn">Cart · 2</button>
+      </div>
+
+      <div class="hero">
+        <div class="hero-text">
+          <span class="eyebrow">New this week</span>
+          <h3>Iced rose latte is back</h3>
+          <p>House espresso, oat milk, a whisper of rose syrup. Order ahead and skip the line.</p>
+          <button class="btn-primary">Order now</button>
+          <button class="btn-secondary">View menu</button>
+        </div>
+      </div>
+
+      <div class="menu-section">
+        <h4>Best sellers</h4>
+        <div class="cards">
+          <div class="card">
+            <span class="tag bestseller">Bestseller</span>
+            <div class="item-swatch"></div>
+            <h5>Vanilla bean latte</h5>
+            <p class="desc">Espresso, steamed milk, house vanilla</p>
+            <div class="row"><span class="price">₱145</span><button class="add-btn">+</button></div>
+          </div>
+          <div class="card">
+            <span class="tag new">New</span>
+            <div class="item-swatch" style="background:var(--accent)"></div>
+            <h5>Tulip honey cortado</h5>
+            <p class="desc">Double shot, honey, light foam</p>
+            <div class="row"><span class="price">₱160</span><button class="add-btn">+</button></div>
+          </div>
+          <div class="card">
+            <div class="item-swatch" style="background:#F0A8BB"></div>
+            <h5>Classic cappuccino</h5>
+            <p class="desc">Rich, foamy, balanced</p>
+            <div class="row"><span class="price">₱130</span><button class="add-btn">+</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="alerts">
+        <div class="alert success"><i class="ti"></i>Your order has been confirmed — ready for pickup in 8 minutes.</div>
+        <div class="alert info">You're 2 stamps away from a free drink.</div>
+        <div class="alert error">That promo code has expired.</div>
+      </div>
+
+      <div class="footer-cta">
+        <p>Get 50 points when you sign up for Sheilz Rewards.</p>
+        <a href="#" class="link">Join free →</a>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><i style="background:#C2456A"></i> Primary actions</span>
+      <span><i style="background:#E08A4F"></i> Accent / highlights</span>
+      <span><i style="background:#4F9A5C"></i> Success state</span>
+      <span><i style="background:#D6485E"></i> Error state</span>
+      <span><i style="background:#3A2B27"></i> Text</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>What changed, and why it follows UI convention</h2>
+    <div class="note" style="border-left-color:var(--accent);">
+      <strong>1. Split one color into roles.</strong> Buttons/links use a saturated, AA-compliant <code>#C2456A</code>; decorative fills use the lighter <code>#E8839E</code>. Same family, different jobs — this is standard practice (compare how most products use a "600" shade for buttons and a "100–200" shade for tints).<br><br>
+      <strong>2. Neutrals carry the bulk of the screen.</strong> Page background is a soft cream, cards are white, body text is a near-black brown — not pink. This is why polished apps rarely look like their brand color at first glance: color is reserved for ~10–15% of the UI (actions, highlights, status), not the whole canvas.<br><br>
+      <strong>3. Added a second accent.</strong> The peach/orange from the logo's small flowers gives tags and secondary highlights somewhere to live, so primary pink stays meaningful as "this is clickable" instead of being reused for everything.<br><br>
+      <strong>4. Real semantic colors.</strong> Success and error now use conventional, clearly-saturated green/red rather than forcing pink to represent both a confirmation and a problem.
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
