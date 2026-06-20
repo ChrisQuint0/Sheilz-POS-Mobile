@@ -7,14 +7,23 @@ import AppText from '../ui/AppText';
 
 interface ProductCardProps {
   item: MenuItem;
+  onSelect: (item: MenuItem) => void;
 }
 
-export default function ProductCard({ item }: ProductCardProps) {
-  const addToCart = usePOSStore((state) => state.addToCart);
+export default function ProductCard({ item, onSelect }: ProductCardProps) {
+  const { cart } = usePOSStore();
+  const quantityInCart = cart.filter(c => c.item.id === item.id).reduce((sum, c) => sum + c.quantity, 0);
 
   return (
-    <TouchableOpacity style={styles.card} onPress={() => addToCart(item)}>
-      <Image source={{ uri: item.image }} style={styles.cardImage} />
+    <TouchableOpacity style={styles.card} onPress={() => onSelect(item)}>
+      <View style={styles.imageContainer}>
+        <Image source={{ uri: item.image }} style={styles.cardImage} />
+        {quantityInCart > 0 && (
+          <View style={styles.badge}>
+            <AppText style={styles.badgeText}>{quantityInCart}</AppText>
+          </View>
+        )}
+      </View>
       <View style={styles.cardInfo}>
         <AppText style={styles.cardTitle}>{item.name}</AppText>
         <AppText style={styles.cardCategory}>{item.category}</AppText>
@@ -78,5 +87,27 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.full,
     justifyContent: "center",
     alignItems: "center",
+  },
+  imageContainer: {
+    position: 'relative',
+  },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: COLORS.primary,
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: COLORS.surface,
+    paddingHorizontal: 4,
+  },
+  badgeText: {
+    color: COLORS.surface,
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });

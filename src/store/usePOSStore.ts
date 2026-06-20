@@ -8,8 +8,19 @@ export interface MenuItem {
   image: string;
 }
 
+import { Size, Temp } from '../constants/pricing';
+
+export interface CartItemOptions {
+  size?: Size;
+  temp?: Temp;
+  addon?: boolean;
+}
+
 export interface CartItem {
+  cartItemId: string; // Unique combination of id+size+temp+addon
   item: MenuItem;
+  options?: CartItemOptions;
+  unitPrice: number;
   quantity: number;
 }
 
@@ -22,11 +33,16 @@ interface POSState {
   isSearchActive: boolean;
   setIsSearchActive: (active: boolean) => void;
 
+  // Toast
+  toastMessage: string | null;
+  showToast: (message: string) => void;
+  hideToast: () => void;
+
   // Cart
   cart: CartItem[];
-  addToCart: (item: MenuItem) => void;
-  removeFromCart: (itemId: string) => void;
-  decrementCartItem: (itemId: string) => void;
+  addToCart: (item: MenuItem, options?: CartItemOptions, unitPrice?: number) => void;
+  removeFromCart: (cartItemId: string) => void;
+  decrementCartItem: (cartItemId: string) => void;
   clearCart: () => void;
   
   // Order Generation
@@ -54,35 +70,44 @@ export const usePOSStore = create<POSState>((set, get) => ({
   isSearchActive: false,
   setIsSearchActive: (active) => set({ isSearchActive: active }),
 
+  toastMessage: null,
+  showToast: (message) => set({ toastMessage: message }),
+  hideToast: () => set({ toastMessage: null }),
+
   cart: [],
-  addToCart: (item) => set((state) => {
-    const existing = state.cart.find((c) => c.item.id === item.id);
+  addToCart: (item, options, unitPrice) => set((state) => {
+    // Generate unique ID based on options
+    const optionStr = options ? `${options.size || ''}-${options.temp || ''}-${options.addon ? 'addon' : ''}` : 'no-options';
+    const cartItemId = `${item.id}-${optionStr}`;
+    const price = unitPrice !== undefined ? unitPrice : item.price;
+
+    const existing = state.cart.find((c) => c.cartItemId === cartItemId);
     if (existing) {
       return {
         cart: state.cart.map((c) =>
-          c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c
+          c.cartItemId === cartItemId ? { ...c, quantity: c.quantity + 1 } : c
         ),
       };
     }
-    return { cart: [...state.cart, { item, quantity: 1 }] };
+    return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity: 1 }] };
   }),
 
-  removeFromCart: (itemId) => set((state) => ({
-    cart: state.cart.filter((c) => c.item.id !== itemId),
+  removeFromCart: (cartItemId) => set((state) => ({
+    cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
   })),
 
-  decrementCartItem: (itemId) => set((state) => {
-    const existing = state.cart.find((c) => c.item.id === itemId);
+  decrementCartItem: (cartItemId) => set((state) => {
+    const existing = state.cart.find((c) => c.cartItemId === cartItemId);
     if (existing && existing.quantity > 1) {
       return {
         cart: state.cart.map((c) =>
-          c.item.id === itemId ? { ...c, quantity: c.quantity - 1 } : c
+          c.cartItemId === cartItemId ? { ...c, quantity: c.quantity - 1 } : c
         ),
       };
     }
     // If quantity is 1, remove it
     return {
-      cart: state.cart.filter((c) => c.item.id !== itemId),
+      cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
     };
   }),
 

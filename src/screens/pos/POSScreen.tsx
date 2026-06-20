@@ -20,25 +20,50 @@ import CartSummary from "../../components/pos/CartSummary";
 import SuccessModal from "../../components/pos/SuccessModal";
 
 // Store & Theme
-import { usePOSStore } from "../../store/usePOSStore";
+import { usePOSStore, MenuItem } from "../../store/usePOSStore";
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from "../../constants/theme";
 import AppText from "../../components/ui/AppText";
+import ProductOptionModal from "../../components/pos/ProductOptionModal";
+import { PRICING_RULES, getProductPrice } from "../../constants/pricing";
+import Toast from "../../components/ui/Toast";
 
 export default function POSScreen() {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isTablet = width >= 768;
 
-  const { cart } = usePOSStore();
+  const { cart, addToCart, showToast } = usePOSStore();
   const [isCartModalVisible, setIsCartModalVisible] = useState(false);
   const [isSuccessVisible, setIsSuccessVisible] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null);
+  const [isOptionModalVisible, setIsOptionModalVisible] = useState(false);
 
-  const cartTotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
+  const cartTotal = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
   const cartItemCount = cart.reduce((sum, c) => sum + c.quantity, 0);
 
   const handleChargeComplete = () => {
     setIsCartModalVisible(false);
     setIsSuccessVisible(true);
+  };
+
+  const handleProductSelect = (item: MenuItem) => {
+    const config = PRICING_RULES[item.name];
+    if (!config) {
+      addToCart(item, undefined, item.price);
+      return;
+    }
+
+    if (config.sizes.length === 1 && config.temps.length === 1 && !config.hasAddon) {
+      const size = config.sizes[0];
+      const temp = config.temps[0];
+      const price = getProductPrice(item.name, size, temp, false);
+      addToCart(item, { size, temp, addon: false }, price || item.price);
+      showToast(`Added ${item.name} to order`);
+      return;
+    }
+
+    setSelectedProduct(item);
+    setIsOptionModalVisible(true);
   };
 
   // PanResponder to handle swipe down on Modal Header
@@ -62,12 +87,13 @@ export default function POSScreen() {
         { paddingTop: insets.top }
       ]}
     >
+      <Toast />
       <View style={styles.container}>
         {/* MAIN POS AREA */}
         <View style={styles.mainArea}>
           <POSHeader />
           <POSCategories />
-          <ProductGrid isTablet={isTablet} />
+          <ProductGrid isTablet={isTablet} onSelect={handleProductSelect} />
 
           {/* Mobile Floating Cart Summary */}
           {!isTablet && cart.length > 0 && (
@@ -126,6 +152,13 @@ export default function POSScreen() {
 
         {/* Success Animation Modal */}
         <SuccessModal visible={isSuccessVisible} onHide={() => setIsSuccessVisible(false)} />
+
+        {/* Product Option Modal */}
+        <ProductOptionModal 
+          visible={isOptionModalVisible} 
+          item={selectedProduct} 
+          onClose={() => setIsOptionModalVisible(false)} 
+        />
       </View>
     </View>
   );

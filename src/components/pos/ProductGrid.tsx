@@ -7,9 +7,10 @@ import { SPACING } from '../../constants/theme';
 
 interface ProductGridProps {
   isTablet: boolean;
+  onSelect: (item: MenuItem) => void;
 }
 
-export default function ProductGrid({ isTablet }: ProductGridProps) {
+export default function ProductGrid({ isTablet, onSelect }: ProductGridProps) {
   const { activeCategory, searchQuery } = usePOSStore();
 
   const filteredItems = MENU_ITEMS.filter((item) => {
@@ -25,7 +26,7 @@ export default function ProductGrid({ isTablet }: ProductGridProps) {
     <FlatList
       data={filteredItems}
       keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <ProductCard item={item} />}
+      renderItem={({ item }) => <ProductCard item={item} onSelect={onSelect} />}
       contentContainerStyle={styles.productList}
       numColumns={isTablet ? 3 : 1}
       key={isTablet ? "tablet" : "mobile"} 

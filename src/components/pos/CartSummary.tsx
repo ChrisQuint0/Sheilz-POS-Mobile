@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { usePOSStore } from '../../store/usePOSStore';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
 import AppText from '../ui/AppText';
+import PaymentModal from './PaymentModal';
 
 interface CartSummaryProps {
   onChargeComplete?: () => void;
@@ -12,6 +13,7 @@ interface CartSummaryProps {
 export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
   const { cart, addToCart, decrementCartItem, removeFromCart, clearCart, generateOrderNumber } = usePOSStore();
   const [orderNumber, setOrderNumber] = useState('');
+  const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
 
   // Generate order number when cart becomes non-empty
   useEffect(() => {
@@ -22,16 +24,20 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
     }
   }, [cart.length, orderNumber, generateOrderNumber]);
 
-  const cartTotal = cart.reduce((sum, c) => sum + c.item.price * c.quantity, 0);
+  const cartTotal = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
 
-  const handleCharge = () => {
-    // Process payment logic here later
+  const handleChargeClick = () => {
+    setIsPaymentModalVisible(true);
+  };
+
+  const handlePaymentConfirm = (method: string) => {
+    setIsPaymentModalVisible(false);
+    // You could save the payment method to your backend here
     clearCart();
     setOrderNumber('');
     if (onChargeComplete) {
       onChargeComplete();
     }
-    // Could show a success toast here
   };
 
   return (
@@ -51,23 +57,34 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
         renderItem={({ item }) => (
           <View style={styles.cartItem}>
             <View style={styles.cartItemMain}>
-              <AppText style={styles.cartItemName}>{item.item.name}</AppText>
+              <View style={styles.cartItemTitleArea}>
+                <AppText style={styles.cartItemName}>{item.item.name}</AppText>
+                {item.options && (
+                  <AppText style={styles.cartItemOptions}>
+                    {[
+                      item.options.size !== 'One Size' ? item.options.size : null,
+                      item.options.temp !== 'None' ? item.options.temp : null,
+                      item.options.addon ? 'Extra Honey' : null
+                    ].filter(Boolean).join(' • ')}
+                  </AppText>
+                )}
+              </View>
               <AppText style={styles.cartItemPrice}>
-                ₱{(item.item.price * item.quantity).toFixed(2)}
+                ₱{(item.unitPrice * item.quantity).toFixed(2)}
               </AppText>
             </View>
 
             <View style={styles.cartItemActions}>
-              <TouchableOpacity onPress={() => decrementCartItem(item.item.id)} style={styles.actionBtn}>
+              <TouchableOpacity onPress={() => decrementCartItem(item.cartItemId)} style={styles.actionBtn}>
                 <Ionicons name="remove" size={18} color={COLORS.textLight} />
               </TouchableOpacity>
               <AppText style={styles.cartItemQty}>{item.quantity}</AppText>
-              <TouchableOpacity onPress={() => addToCart(item.item)} style={styles.actionBtn}>
+              <TouchableOpacity onPress={() => addToCart(item.item, item.options, item.unitPrice)} style={styles.actionBtn}>
                 <Ionicons name="add" size={18} color={COLORS.textLight} />
               </TouchableOpacity>
               
               <TouchableOpacity 
-                onPress={() => removeFromCart(item.item.id)} 
+                onPress={() => removeFromCart(item.cartItemId)} 
                 style={[styles.actionBtn, styles.deleteBtn]}
               >
                 <Ionicons name="trash-outline" size={18} color={COLORS.roseDeep} />
@@ -95,13 +112,20 @@ export default function CartSummary({ onChargeComplete }: CartSummaryProps) {
             cart.length === 0 && styles.chargeButtonDisabled,
           ]}
           disabled={cart.length === 0}
-          onPress={handleCharge}
+          onPress={handleChargeClick}
         >
           <AppText style={styles.chargeButtonText}>
             Charge ₱{cartTotal.toFixed(2)}
           </AppText>
         </TouchableOpacity>
       </View>
+
+      <PaymentModal 
+        visible={isPaymentModalVisible}
+        totalAmount={cartTotal}
+        onClose={() => setIsPaymentModalVisible(false)}
+        onConfirm={handlePaymentConfirm}
+      />
     </View>
   );
 }
@@ -159,12 +183,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: SPACING.sm,
+    alignItems: 'flex-start',
+  },
+  cartItemTitleArea: {
+    flex: 1,
+    paddingRight: SPACING.sm,
   },
   cartItemName: { 
     fontSize: TYPOGRAPHY.sizes.md, 
     fontWeight: TYPOGRAPHY.weights.medium, 
     color: COLORS.text,
-    flex: 1,
+  },
+  cartItemOptions: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: COLORS.textLight,
+    marginTop: 2,
   },
   cartItemPrice: { 
     fontSize: TYPOGRAPHY.sizes.md, 
