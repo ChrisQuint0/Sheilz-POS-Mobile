@@ -17,7 +17,7 @@ import POSHeader from "../../components/pos/POSHeader";
 import POSCategories from "../../components/pos/POSCategories";
 import ProductGrid from "../../components/pos/ProductGrid";
 import CartSummary from "../../components/pos/CartSummary";
-import SuccessModal from "../../components/pos/SuccessModal";
+import ReceiptModal from "../../components/pos/ReceiptModal";
 
 // Store & Theme
 import { usePOSStore, MenuItem } from "../../store/usePOSStore";
@@ -32,9 +32,9 @@ export default function POSScreen() {
   const insets = useSafeAreaInsets();
   const isTablet = width >= 768;
 
-  const { cart, addToCart, showToast } = usePOSStore();
+  const { cart, addToCart, showToast, orders } = usePOSStore();
   const [isCartModalVisible, setIsCartModalVisible] = useState(false);
-  const [isSuccessVisible, setIsSuccessVisible] = useState(false);
+  const [isReceiptVisible, setIsReceiptVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null);
   const [isOptionModalVisible, setIsOptionModalVisible] = useState(false);
 
@@ -43,7 +43,7 @@ export default function POSScreen() {
 
   const handleChargeComplete = () => {
     setIsCartModalVisible(false);
-    setIsSuccessVisible(true);
+    setIsReceiptVisible(true);
   };
 
   const handleClearComplete = () => {
@@ -139,8 +139,12 @@ export default function POSScreen() {
           </KeyboardAvoidingView>
         </Modal>
 
-        {/* Success Animation Modal */}
-        <SuccessModal visible={isSuccessVisible} onHide={() => setIsSuccessVisible(false)} />
+        {/* Receipt Modal */}
+        <ReceiptModal 
+          visible={isReceiptVisible} 
+          onClose={() => setIsReceiptVisible(false)} 
+          order={orders[0] || null}
+        />
 
         {/* Product Option Modal */}
         <ProductOptionModal 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Order, usePOSStore } from '../../store/usePOSStore';
 import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
@@ -35,6 +35,14 @@ export default function TicketCard({ order, width }: TicketCardProps) {
 
   const formattedTime = new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  const handlePrint = () => {
+    Alert.alert('Print Receipt', `Printing ticket #${order.id}...`, [{ text: 'OK' }]);
+  };
+
+  const handleSave = () => {
+    Alert.alert('Save Receipt', `Ticket #${order.id} saved to device.`, [{ text: 'OK' }]);
+  };
+
   return (
     <View style={[styles.cardWrapper, { width }]}>
       <View style={styles.card}>
@@ -62,7 +70,12 @@ export default function TicketCard({ order, width }: TicketCardProps) {
           </View>
         </View>
 
-        <ScrollView style={styles.itemsContainer} showsVerticalScrollIndicator={true}>
+        <ScrollView 
+          style={styles.itemsContainer} 
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
+          contentContainerStyle={styles.scrollContent}
+        >
           {order.items.map((item, index) => (
             <View key={index} style={styles.itemRow}>
               <View style={styles.qtyBadge}>
@@ -83,6 +96,17 @@ export default function TicketCard({ order, width }: TicketCardProps) {
             </View>
           ))}
         </ScrollView>
+
+        <View style={styles.receiptActions}>
+          <TouchableOpacity style={styles.iconBtn} onPress={handlePrint}>
+            <Ionicons name="print-outline" size={20} color={COLORS.espresso} />
+            <AppText style={styles.iconBtnText}>Print</AppText>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={handleSave}>
+            <Ionicons name="download-outline" size={20} color={COLORS.espresso} />
+            <AppText style={styles.iconBtnText}>Save</AppText>
+          </TouchableOpacity>
+        </View>
 
         {order.status === 'Current' && (
           <View style={styles.actions}>
@@ -185,6 +209,10 @@ const styles = StyleSheet.create({
   statusTextVoided: { color: COLORS.roseDeep },
   itemsContainer: {
     flex: 1,
+    flexShrink: 1,
+  },
+  scrollContent: {
+    paddingRight: SPACING.xs,
   },
   itemRow: {
     flexDirection: 'row',
@@ -248,5 +276,25 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     fontWeight: TYPOGRAPHY.weights.bold,
     fontSize: TYPOGRAPHY.sizes.md,
+  },
+  receiptActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    borderTopWidth: 1,
+    borderTopColor: COLORS.stone200,
+    paddingTop: SPACING.md,
+    marginTop: SPACING.sm,
+    gap: SPACING.lg,
+  },
+  iconBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: SPACING.xs,
+  },
+  iconBtnText: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    fontWeight: TYPOGRAPHY.weights.semibold,
+    color: COLORS.espresso,
   }
 });

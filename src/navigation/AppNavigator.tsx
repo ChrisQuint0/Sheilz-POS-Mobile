@@ -20,11 +20,32 @@ import TicketsScreen from "../screens/pos/TicketsScreen";
 
 // Store
 import { usePOSStore } from "../store/usePOSStore";
+import { useSyncStore, SyncStatus } from "../store/useSyncStore";
+
+// Sync Screen
+import SyncScreen from "../screens/sync/SyncScreen";
 
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
 
 function MainDrawerNavigator() {
+  const { status, pendingTransactions, pendingInventory, failedRecords } = useSyncStore();
+  const totalPending = pendingTransactions + pendingInventory + failedRecords;
+
+  const getSyncIcon = (currentStatus: SyncStatus, defaultColor: string) => {
+    switch (currentStatus) {
+      case 'Synced': return { name: 'checkmark-circle', color: COLORS.success };
+      case 'Pending Sync': return { name: 'time', color: COLORS.warning };
+      case 'Syncing': return { name: 'sync', color: COLORS.info };
+      case 'Sync Failed': return { name: 'warning', color: COLORS.danger };
+      case 'Offline': return { name: 'cloud-offline', color: COLORS.textLight };
+      default: return { name: 'cloud', color: defaultColor };
+    }
+  };
+
+  const syncIconDetails = getSyncIcon(status, COLORS.textLight);
+  const syncDrawerLabel = totalPending > 0 ? `Data Sync (${totalPending})` : 'Data Sync';
+
   return (
     <Drawer.Navigator
       initialRouteName="Orders"
@@ -72,6 +93,27 @@ function MainDrawerNavigator() {
             </View>
           ),
           drawerIcon: ({ color, size }) => <Ionicons name="receipt-outline" size={size} color={color} />
+        }}
+      />
+      <Drawer.Screen 
+        name="Data Sync" 
+        component={SyncScreen} 
+        options={{
+          headerShown: false,
+          drawerLabel: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
+              <Text style={{ 
+                fontWeight: TYPOGRAPHY.weights.semibold,
+                fontSize: TYPOGRAPHY.sizes.sm,
+                color: COLORS.espresso 
+              }}>
+                {syncDrawerLabel}
+              </Text>
+              {/* Quick Status Icon beside label */}
+              <Ionicons name={syncIconDetails.name as any} size={16} color={syncIconDetails.color} />
+            </View>
+          ),
+          drawerIcon: ({ color, size }) => <Ionicons name="sync" size={size} color={color} />
         }}
       />
     </Drawer.Navigator>
