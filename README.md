@@ -2,8 +2,6 @@
 
 The mobile Point-of-Sale (POS) application for Sheilz Coffee, providing a front-of-house terminal for cashiers. It is designed to handle dynamic product options, order processing, and ticket management with a beautiful, modern UI.
 
-> **Note**: While the original `PRODUCT_SCOPE.md` mentions Flutter, this repository is built using **React Native** and **Expo v54**.
-
 ## Tech Stack
 
 - **Framework**: React Native with Expo (v54)
