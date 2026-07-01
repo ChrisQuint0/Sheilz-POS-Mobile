@@ -1,58 +1,98 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  StyleSheet, 
-  TextInput, 
-  TouchableOpacity, 
-  KeyboardAvoidingView, 
-  Platform, 
+import React, { useState } from "react";
+import {
+  View,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
   Image,
-  Dimensions
-} from 'react-native';
-import { usePOSStore } from '../../store/usePOSStore';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
-import AppText from '../../components/ui/AppText';
-import { Ionicons } from '@expo/vector-icons';
+  Dimensions,
+} from "react-native";
+import { usePOSStore } from "../../store/usePOSStore";
+import { supabase } from "../../lib/supabase";
+import { resolveProfile } from "../../lib/auth";
+import {
+  COLORS,
+  TYPOGRAPHY,
+  SPACING,
+  BORDER_RADIUS,
+} from "../../constants/theme";
+import AppText from "../../components/ui/AppText";
+import { Ionicons } from "@expo/vector-icons";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 const isTablet = width >= 768;
 
 export default function LoginScreen() {
   const { login } = usePOSStore();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = () => {
-    // Dummy authentication logic. In a real app, this calls Supabase or an API.
-    if (email.trim() && password.trim()) {
-      login();
-    } else {
+  const handleLogin = async () => {
+    if (!email.trim() || !password.trim()) {
       alert("Please enter both email and password.");
+      return;
     }
+
+    setLoading(true);
+
+    const { data: authData, error: authError } =
+      await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+    if (authError || !authData.user) {
+      setLoading(false);
+      alert(authError?.message ?? "Invalid email or password.");
+      return;
+    }
+
+    const profile = await resolveProfile(authData.user.id);
+
+    if (!profile) {
+      setLoading(false);
+      alert(
+        "Unable to sign in. Your profile could not be found or your account is inactive. Contact the administrator.",
+      );
+      return;
+    }
+
+    setLoading(false);
+    login(profile);
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container} 
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <View style={styles.card}>
         <View style={styles.header}>
-          <Image 
-            source={require('../../../assets/shielz_pos_logo.png')} 
+          <Image
+            source={require("../../../assets/shielz_pos_logo.png")}
             style={styles.logo}
             resizeMode="contain"
           />
           <AppText style={styles.title}>SHIELZ POS</AppText>
-          <AppText style={styles.subtitle}>Sign in to access the terminal</AppText>
+          <AppText style={styles.subtitle}>
+            Sign in to access the terminal
+          </AppText>
         </View>
 
         <View style={styles.form}>
           <View style={styles.inputGroup}>
             <AppText style={styles.label}>Email Address</AppText>
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color={COLORS.textLight} style={styles.inputIcon} />
+              <Ionicons
+                name="mail-outline"
+                size={20}
+                color={COLORS.textLight}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="cashier@sheilz.com"
@@ -61,6 +101,7 @@ export default function LoginScreen() {
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
+                editable={!loading}
               />
             </View>
           </View>
@@ -68,7 +109,12 @@ export default function LoginScreen() {
           <View style={styles.inputGroup}>
             <AppText style={styles.label}>Password</AppText>
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color={COLORS.textLight} style={styles.inputIcon} />
+              <Ionicons
+                name="lock-closed-outline"
+                size={20}
+                color={COLORS.textLight}
+                style={styles.inputIcon}
+              />
               <TextInput
                 style={styles.input}
                 placeholder="Enter your password"
@@ -76,15 +122,29 @@ export default function LoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
+                editable={!loading}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
-                <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color={COLORS.textLight} />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                style={styles.eyeBtn}
+              >
+                <Ionicons
+                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  size={20}
+                  color={COLORS.textLight}
+                />
               </TouchableOpacity>
             </View>
           </View>
 
-          <TouchableOpacity style={styles.loginBtn} onPress={handleLogin}>
-            <AppText style={styles.loginBtnText}>Login</AppText>
+          <TouchableOpacity
+            style={styles.loginBtn}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            <AppText style={styles.loginBtnText}>
+              {loading ? "Signing in..." : "Login"}
+            </AppText>
           </TouchableOpacity>
 
           <View style={styles.footer}>
@@ -102,13 +162,13 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: SPACING.md,
   },
   card: {
     backgroundColor: COLORS.surface,
-    width: '100%',
+    width: "100%",
     maxWidth: isTablet ? 450 : 380,
     borderRadius: BORDER_RADIUS.xl,
     padding: SPACING.xl,
@@ -119,7 +179,7 @@ const styles = StyleSheet.create({
     shadowRadius: 15,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: SPACING.xxl,
   },
   logo: {
@@ -131,7 +191,7 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.xxl,
     fontWeight: TYPOGRAPHY.weights.bold,
     color: COLORS.espresso,
-    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }),
+    fontFamily: Platform.select({ ios: "Georgia", android: "serif" }),
     marginBottom: 4,
   },
   subtitle: {
@@ -139,7 +199,7 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
   },
   form: {
-    width: '100%',
+    width: "100%",
   },
   inputGroup: {
     marginBottom: SPACING.lg,
@@ -151,9 +211,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.xs,
   },
   inputContainer: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'center',
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: COLORS.stone100,
     borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
@@ -176,8 +236,8 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     height: 50,
     borderRadius: BORDER_RADIUS.md,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: SPACING.md,
   },
   loginBtnText: {
@@ -186,9 +246,9 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.weights.bold,
   },
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     marginTop: SPACING.xl,
     gap: 6,
     paddingHorizontal: SPACING.md,
@@ -197,6 +257,6 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.sm,
     color: COLORS.textLight,
     flexShrink: 1,
-    textAlign: 'center',
-  }
+    textAlign: "center",
+  },
 });

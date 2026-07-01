@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { supabase } from '../lib/supabase';
 
 export interface MenuItem {
   id: string;
@@ -36,12 +37,20 @@ export interface Order {
   timestamp: string;
 }
 
+export interface AuthProfile {
+  id: string;
+  display_name: string;
+  role: string;
+}
+
 interface POSState {
   // Auth & Boot
   hasFinishedSplash: boolean;
   setHasFinishedSplash: (finished: boolean) => void;
   isAuthenticated: boolean;
-  login: () => void;
+  userId: string | null;
+  userRole: string | null;
+  login: (profile: AuthProfile) => void;
   logout: () => void;
 
   // Navigation & Filtering
@@ -88,8 +97,18 @@ export const usePOSStore = create<POSState>((set, get) => ({
   hasFinishedSplash: false,
   setHasFinishedSplash: (finished) => set({ hasFinishedSplash: finished }),
   isAuthenticated: false,
-  login: () => set({ isAuthenticated: true }),
-  logout: () => set({ isAuthenticated: false }),
+  userId: null,
+  userRole: null,
+  login: (profile) => set({
+    isAuthenticated: true,
+    userId: profile.id,
+    userRole: profile.role,
+    cashierName: profile.display_name,
+  }),
+  logout: () => {
+    supabase.auth.signOut();
+    set({ isAuthenticated: false, userId: null, userRole: null });
+  },
 
   activeCategory: 'All',
   setActiveCategory: (category) => set({ activeCategory: category }),

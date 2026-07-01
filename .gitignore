@@ -39,3 +39,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+#development related md files
+pos_mobile_project_structure.md
+handoff.md
