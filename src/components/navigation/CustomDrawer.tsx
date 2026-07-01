@@ -8,12 +8,14 @@ import {
   Platform,
   Modal,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import {
   DrawerContentScrollView,
   DrawerItemList,
   DrawerContentComponentProps,
 } from "@react-navigation/drawer";
+import { Ionicons } from "@expo/vector-icons";
 import { usePOSStore } from "../../store/usePOSStore";
 import {
   COLORS,
@@ -25,7 +27,7 @@ import AppText from "../ui/AppText";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function CustomDrawer(props: DrawerContentComponentProps) {
-  const { cashierName } = usePOSStore();
+  const { cashierName, logout } = usePOSStore();
   const insets = useSafeAreaInsets();
 
   const [isProfileModalVisible, setIsProfileModalVisible] = useState(false);
@@ -38,6 +40,13 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
+
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Log Out", style: "destructive", onPress: () => logout() },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -78,6 +87,13 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
           <AppText style={styles.profileRole}>CASHIER</AppText>
           <AppText style={styles.profileName}>{cashierName}</AppText>
         </View>
+        <TouchableOpacity
+          style={styles.logoutBtn}
+          onPress={handleLogout}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Ionicons name="log-out-outline" size={22} color={COLORS.textLight} />
+        </TouchableOpacity>
       </TouchableOpacity>
 
       {/* Profile Modal (read-only) */}
@@ -176,6 +192,10 @@ const styles = StyleSheet.create({
     color: COLORS.espresso,
     fontSize: TYPOGRAPHY.sizes.sm,
     fontWeight: TYPOGRAPHY.weights.semibold,
+  },
+  logoutBtn: {
+    padding: SPACING.xs,
+    marginLeft: SPACING.sm,
   },
   modalOverlay: {
     flex: 1,
