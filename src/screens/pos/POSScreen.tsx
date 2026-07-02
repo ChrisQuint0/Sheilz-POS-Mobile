@@ -23,11 +23,15 @@ import ReceiptModal from "../../components/pos/ReceiptModal";
 import {
   usePOSStore,
   MenuItem,
-  ProductVariant,
   ProductCategory,
   PaymentMethod,
 } from "../../store/usePOSStore";
-import { supabase } from "../../lib/supabase";
+import {
+  getCategories,
+  getProducts,
+  getPaymentMethods,
+} from "../../services/catalogRepository";
+import { syncCatalogFromSupabase } from "../../services/catalogSyncService";
 import {
   COLORS,
   TYPOGRAPHY,
@@ -49,8 +53,9 @@ export default function POSScreen() {
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null);
   const [isOptionModalVisible, setIsOptionModalVisible] = useState(false);
 
-  // Product catalog — fetched here (parent) and passed down as props to
-  // ProductGrid / POSCategories / ProductOptionModal, per the
+  // Product catalog — cache-first from SQLite (src/services/catalogRepository.ts),
+  // refreshed in the background from Supabase (src/services/catalogSyncService.ts).
+  // Reads/sync trigger live here (parent), per the
   // "Supabase calls belong in parent components only" convention.
   const [products, setProducts] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<ProductCategory[]>([]);
@@ -60,99 +65,51 @@ export default function POSScreen() {
   useEffect(() => {
     let isMounted = true;
 
-    const fetchCatalog = async () => {
-      setProductsLoading(true);
-
-      const [categoriesResult, productsResult, paymentMethodsResult] =
+    const loadCatalog = async () => {
+      // 1. Instant render from the local cache.
+      const [cachedCategories, cachedProducts, cachedPaymentMethods] =
         await Promise.all([
-          supabase.from("product_categories").select("id, name").order("name"),
-          supabase
-            .from("products")
-            .select(
-              `id, name, category_id, image_url,
-             product_categories ( id, name ),
-             product_variants!inner (
-               id,
-               price,
-               sizes ( id, name, sort_order ),
-               temperatures ( id, name, sort_order )
-             )`,
-            )
-            .eq("is_visible", true)
-            .is("archived_at", null)
-            .gt("product_variants.price", 0)
-            .order("name"),
-          supabase
-            .from("payment_methods")
-            .select("id, name, is_enabled")
-            .eq("is_enabled", true)
-            .order("name"),
+          getCategories(),
+          getProducts(),
+          getPaymentMethods(),
         ]);
 
       if (!isMounted) return;
 
-      if (categoriesResult.error) {
-        console.error(
-          "Failed to fetch product categories:",
-          categoriesResult.error,
-        );
-      } else if (categoriesResult.data) {
-        setCategories(categoriesResult.data as ProductCategory[]);
+      setCategories(cachedCategories);
+      setProducts(cachedProducts);
+      setPaymentMethods(cachedPaymentMethods);
+
+      // Only keep the spinner up if there was nothing to show yet
+      // (first launch with an empty cache).
+      if (cachedProducts.length > 0) {
+        setProductsLoading(false);
       }
 
-      if (productsResult.error) {
-        console.error("Failed to fetch products:", productsResult.error);
-      } else if (productsResult.data) {
-        const mapped: MenuItem[] = productsResult.data.map((p: any) => {
-          const variants: ProductVariant[] = (p.product_variants || []).map(
-            (v: any) => ({
-              id: v.id,
-              price: v.price,
-              size: v.sizes
-                ? {
-                    id: v.sizes.id,
-                    name: v.sizes.name,
-                    sort_order: v.sizes.sort_order,
-                  }
-                : null,
-              temperature: v.temperatures
-                ? {
-                    id: v.temperatures.id,
-                    name: v.temperatures.name,
-                    sort_order: v.temperatures.sort_order,
-                  }
-                : null,
-            }),
-          );
-          const lowestPrice =
-            variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : 0;
+      // 2. Refresh from Supabase in the background.
+      const result = await syncCatalogFromSupabase();
 
-          return {
-            id: p.id,
-            name: p.name,
-            category: p.product_categories?.name ?? "",
-            category_id: p.category_id,
-            image: p.image_url,
-            price: lowestPrice,
-            variants,
-          };
-        });
-        setProducts(mapped);
-      }
+      if (!isMounted) return;
 
-      if (paymentMethodsResult.error) {
-        console.error(
-          "Failed to fetch payment methods:",
-          paymentMethodsResult.error,
-        );
-      } else if (paymentMethodsResult.data) {
-        setPaymentMethods(paymentMethodsResult.data as PaymentMethod[]);
+      if (result.success) {
+        const [freshCategories, freshProducts, freshPaymentMethods] =
+          await Promise.all([
+            getCategories(),
+            getProducts(),
+            getPaymentMethods(),
+          ]);
+
+        if (!isMounted) return;
+
+        setCategories(freshCategories);
+        setProducts(freshProducts);
+        setPaymentMethods(freshPaymentMethods);
       }
 
       setProductsLoading(false);
     };
 
-    fetchCatalog();
+    loadCatalog();
 
     return () => {
       isMounted = false;
