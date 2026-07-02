@@ -1,53 +1,97 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Modal, TouchableOpacity, Platform, Image, TextInput } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
-import AppText from '../ui/AppText';
+import React, { useState } from "react";
+import {
+  View,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  Platform,
+  Image,
+  TextInput,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  COLORS,
+  TYPOGRAPHY,
+  SPACING,
+  BORDER_RADIUS,
+} from "../../constants/theme";
+import AppText from "../ui/AppText";
+import { PaymentMethod } from "../../store/usePOSStore";
+
+// Visual presentation lookup for fetched payment methods. The `payment_methods`
+// table has no `image_url` column, so we keep a name -> asset/icon map locally
+// and fall back to a cash icon for anything unmatched.
+const METHOD_PRESENTATION: Record<string, { icon: string | null; image: any }> =
+  {
+    Cash: { icon: "cash-outline", image: null },
+    GCash: { icon: null, image: require("../../../assets/gcash.png") },
+    Gcash: { icon: null, image: require("../../../assets/gcash.png") },
+    BPI: { icon: null, image: require("../../../assets/bpi.png") },
+    Maya: { icon: null, image: require("../../../assets/maya.png") },
+  };
+
+const DEFAULT_PRESENTATION = { icon: "cash-outline", image: null };
 
 interface PaymentModalProps {
   visible: boolean;
   totalAmount: number;
+  paymentMethods: PaymentMethod[];
   onClose: () => void;
   onConfirm: (method: string, customerName?: string) => void;
 }
 
-const PAYMENT_METHODS = [
-  { id: 'Cash', icon: 'cash-outline', label: 'Cash', image: null },
-  { id: 'Gcash', icon: null, label: 'GCash', image: require('../../../assets/gcash.png') },
-  { id: 'BPI', icon: null, label: 'BPI', image: require('../../../assets/bpi.png') },
-  { id: 'Maya', icon: null, label: 'Maya', image: require('../../../assets/maya.png') },
-];
-
-export default function PaymentModal({ visible, totalAmount, onClose, onConfirm }: PaymentModalProps) {
-  const [selectedMethod, setSelectedMethod] = useState<typeof PAYMENT_METHODS[0] | null>(null);
-  const [customerName, setCustomerName] = useState('');
+export default function PaymentModal({
+  visible,
+  totalAmount,
+  paymentMethods,
+  onClose,
+  onConfirm,
+}: PaymentModalProps) {
+  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(
+    null,
+  );
+  const [customerName, setCustomerName] = useState("");
 
   const handleClose = () => {
     setSelectedMethod(null);
-    setCustomerName('');
+    setCustomerName("");
     onClose();
   };
 
   const handleConfirm = () => {
     if (selectedMethod) {
-      onConfirm(selectedMethod.id, customerName.trim());
+      onConfirm(selectedMethod.name, customerName.trim());
       setSelectedMethod(null);
-      setCustomerName('');
+      setCustomerName("");
     }
   };
+
+  const getPresentation = (name: string) =>
+    METHOD_PRESENTATION[name] ?? DEFAULT_PRESENTATION;
+
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
+    >
       <View style={styles.overlay}>
         <View style={styles.modalContent}>
           <View style={styles.header}>
             {selectedMethod ? (
-              <TouchableOpacity onPress={() => setSelectedMethod(null)} style={styles.backBtn}>
+              <TouchableOpacity
+                onPress={() => setSelectedMethod(null)}
+                style={styles.backBtn}
+              >
                 <Ionicons name="arrow-back" size={24} color={COLORS.text} />
               </TouchableOpacity>
             ) : (
               <View style={styles.spacer} />
             )}
-            <AppText style={styles.title}>{selectedMethod ? 'Confirm Payment' : 'Select Payment'}</AppText>
+            <AppText style={styles.title}>
+              {selectedMethod ? "Confirm Payment" : "Select Payment"}
+            </AppText>
             <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
               <Ionicons name="close" size={24} color={COLORS.textLight} />
             </TouchableOpacity>
@@ -55,54 +99,85 @@ export default function PaymentModal({ visible, totalAmount, onClose, onConfirm 
 
           <View style={styles.amountContainer}>
             <AppText style={styles.amountLabel}>Total Due</AppText>
-            <AppText style={styles.amountValue}>₱{totalAmount.toFixed(2)}</AppText>
+            <AppText style={styles.amountValue}>
+              ₱{totalAmount.toFixed(2)}
+            </AppText>
           </View>
 
           {!selectedMethod ? (
             <View style={styles.grid}>
-              {PAYMENT_METHODS.map((method) => (
-                <TouchableOpacity
-                  key={method.id}
-                  style={styles.methodCard}
-                  onPress={() => setSelectedMethod(method)}
-                >
-                  <View style={styles.iconContainer}>
-                    {method.image ? (
-                      <Image source={method.image} style={styles.methodLogo} resizeMode="contain" />
-                    ) : (
-                      <Ionicons name={method.icon as any} size={32} color={COLORS.primary} />
-                    )}
-                  </View>
-                  <AppText style={styles.methodLabel}>{method.label}</AppText>
-                </TouchableOpacity>
-              ))}
+              {paymentMethods.map((method) => {
+                const presentation = getPresentation(method.name);
+                return (
+                  <TouchableOpacity
+                    key={method.id}
+                    style={styles.methodCard}
+                    onPress={() => setSelectedMethod(method)}
+                  >
+                    <View style={styles.iconContainer}>
+                      {presentation.image ? (
+                        <Image
+                          source={presentation.image}
+                          style={styles.methodLogo}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <Ionicons
+                          name={presentation.icon as any}
+                          size={32}
+                          color={COLORS.primary}
+                        />
+                      )}
+                    </View>
+                    <AppText style={styles.methodLabel}>{method.name}</AppText>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : (
-            <View style={styles.confirmView}>
-              <View style={styles.selectedIconContainer}>
-                {selectedMethod.image ? (
-                  <Image source={selectedMethod.image} style={styles.selectedMethodLogo} resizeMode="contain" />
-                ) : (
-                  <Ionicons name={selectedMethod.icon as any} size={48} color={COLORS.primary} />
-                )}
-              </View>
+            (() => {
+              const presentation = getPresentation(selectedMethod.name);
+              return (
+                <View style={styles.confirmView}>
+                  <View style={styles.selectedIconContainer}>
+                    {presentation.image ? (
+                      <Image
+                        source={presentation.image}
+                        style={styles.selectedMethodLogo}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <Ionicons
+                        name={presentation.icon as any}
+                        size={48}
+                        color={COLORS.primary}
+                      />
+                    )}
+                  </View>
 
-              <TextInput
-                style={styles.nameInput}
-                placeholder="Customer Name (Optional)"
-                placeholderTextColor={COLORS.textLight}
-                value={customerName}
-                onChangeText={setCustomerName}
-              />
+                  <TextInput
+                    style={styles.nameInput}
+                    placeholder="Customer Name (Optional)"
+                    placeholderTextColor={COLORS.textLight}
+                    value={customerName}
+                    onChangeText={setCustomerName}
+                  />
 
-              <AppText style={styles.confirmPrompt}>
-                Proceed with {selectedMethod.label} payment?
-              </AppText>
-              
-              <TouchableOpacity style={styles.confirmBtn} onPress={handleConfirm}>
-                <AppText style={styles.confirmBtnText}>Confirm ₱{totalAmount.toFixed(2)}</AppText>
-              </TouchableOpacity>
-            </View>
+                  <AppText style={styles.confirmPrompt}>
+                    Proceed with {selectedMethod.name} payment?
+                  </AppText>
+
+                  <TouchableOpacity
+                    style={styles.confirmBtn}
+                    onPress={handleConfirm}
+                  >
+                    <AppText style={styles.confirmBtnText}>
+                      Confirm ₱{totalAmount.toFixed(2)}
+                    </AppText>
+                  </TouchableOpacity>
+                </View>
+              );
+            })()
           )}
         </View>
       </View>
@@ -113,12 +188,12 @@ export default function PaymentModal({ visible, totalAmount, onClose, onConfirm 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    width: '85%',
+    width: "85%",
     maxWidth: 400,
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.xl,
@@ -130,9 +205,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: SPACING.md,
   },
   spacer: {
@@ -150,7 +225,7 @@ const styles = StyleSheet.create({
     padding: SPACING.xs,
   },
   amountContainer: {
-    alignItems: 'center',
+    alignItems: "center",
     backgroundColor: COLORS.roseBlushSoft,
     padding: SPACING.lg,
     borderRadius: BORDER_RADIUS.lg,
@@ -163,24 +238,24 @@ const styles = StyleSheet.create({
   },
   amountValue: {
     fontSize: TYPOGRAPHY.sizes.xxl,
-    fontWeight: 'bold',
-    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }),
+    fontWeight: "bold",
+    fontFamily: Platform.select({ ios: "Georgia", android: "serif" }),
     color: COLORS.primary,
   },
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: SPACING.md,
-    justifyContent: 'space-between',
+    justifyContent: "space-between",
   },
   methodCard: {
-    width: '47%', // slightly less than 50% to account for gap
+    width: "47%", // slightly less than 50% to account for gap
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.stone200,
     borderRadius: BORDER_RADIUS.lg,
     padding: SPACING.md,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: SPACING.sm,
   },
   iconContainer: {
@@ -188,15 +263,15 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: COLORS.surface,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: SPACING.sm,
     shadowColor: COLORS.espresso,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   methodLogo: {
     width: 36,
@@ -208,7 +283,7 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   confirmView: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingTop: SPACING.md,
   },
   selectedIconContainer: {
@@ -216,19 +291,19 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 40,
     backgroundColor: COLORS.background,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.stone200,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   selectedMethodLogo: {
     width: 50,
     height: 50,
   },
   nameInput: {
-    width: '100%',
+    width: "100%",
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.stone200,
@@ -243,14 +318,14 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.weights.semibold,
     color: COLORS.espresso,
     marginBottom: SPACING.xl,
-    textAlign: 'center',
+    textAlign: "center",
   },
   confirmBtn: {
     backgroundColor: COLORS.primary,
-    width: '100%',
+    width: "100%",
     paddingVertical: SPACING.md,
     borderRadius: BORDER_RADIUS.md,
-    alignItems: 'center',
+    alignItems: "center",
   },
   confirmBtnText: {
     color: COLORS.surface,

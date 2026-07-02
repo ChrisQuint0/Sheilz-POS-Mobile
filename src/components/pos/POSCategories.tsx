@@ -1,27 +1,28 @@
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { usePOSStore } from '../../store/usePOSStore';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
-import AppText from '../ui/AppText';
-import { Ionicons } from '@expo/vector-icons';
+import React, { useState, useRef } from "react";
+import { View, StyleSheet, TouchableOpacity, Animated } from "react-native";
+import { usePOSStore, ProductCategory } from "../../store/usePOSStore";
+import {
+  COLORS,
+  TYPOGRAPHY,
+  SPACING,
+  BORDER_RADIUS,
+} from "../../constants/theme";
+import AppText from "../ui/AppText";
+import { Ionicons } from "@expo/vector-icons";
 
-const CATEGORIES = [
-  "All",
-  "Coffee",
-  "Non-Coffee",
-  "Sparkling",
-  "Tea",
-  "Pastries",
-  "Limited Time",
-];
+interface POSCategoriesProps {
+  categories: ProductCategory[];
+}
 
-export default function POSCategories() {
+export default function POSCategories({ categories }: POSCategoriesProps) {
   const { activeCategory, setActiveCategory } = usePOSStore();
   const [contentWidth, setContentWidth] = useState(0);
   const [visibleWidth, setVisibleWidth] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
   const listRef = useRef<any>(null);
   const currentScrollX = useRef(0);
+
+  const categoryItems = ["All", ...categories.map((c) => c.name)];
 
   React.useEffect(() => {
     const listenerId = scrollX.addListener(({ value }) => {
@@ -32,35 +33,45 @@ export default function POSCategories() {
 
   const showIndicator = contentWidth > visibleWidth && visibleWidth > 0;
   const trackWidth = 50;
-  const thumbWidth = showIndicator ? Math.max(15, (visibleWidth / contentWidth) * trackWidth) : 15;
+  const thumbWidth = showIndicator
+    ? Math.max(15, (visibleWidth / contentWidth) * trackWidth)
+    : 15;
   const maxScroll = Math.max(1, contentWidth - visibleWidth);
   const maxThumbScroll = trackWidth - thumbWidth;
 
   const translateX = scrollX.interpolate({
     inputRange: [0, maxScroll],
     outputRange: [0, maxThumbScroll],
-    extrapolate: 'clamp',
+    extrapolate: "clamp",
   });
 
   const leftChevronOpacity = scrollX.interpolate({
     inputRange: [0, 20],
     outputRange: [0, 1],
-    extrapolate: 'clamp',
+    extrapolate: "clamp",
   });
 
   const rightChevronOpacity = scrollX.interpolate({
     inputRange: [Math.max(0, maxScroll - 20), Math.max(1, maxScroll)],
     outputRange: [1, 0],
-    extrapolate: 'clamp',
+    extrapolate: "clamp",
   });
 
   const scrollBy = (amount: number) => {
-    const newOffset = Math.max(0, Math.min(maxScroll, currentScrollX.current + amount));
+    const newOffset = Math.max(
+      0,
+      Math.min(maxScroll, currentScrollX.current + amount),
+    );
     if (listRef.current) {
-      if (typeof listRef.current.scrollToOffset === 'function') {
+      if (typeof listRef.current.scrollToOffset === "function") {
         listRef.current.scrollToOffset({ offset: newOffset, animated: true });
-      } else if (listRef.current.getNode && typeof listRef.current.getNode().scrollToOffset === 'function') {
-        listRef.current.getNode().scrollToOffset({ offset: newOffset, animated: true });
+      } else if (
+        listRef.current.getNode &&
+        typeof listRef.current.getNode().scrollToOffset === "function"
+      ) {
+        listRef.current
+          .getNode()
+          .scrollToOffset({ offset: newOffset, animated: true });
       }
     }
   };
@@ -71,19 +82,19 @@ export default function POSCategories() {
         ref={listRef}
         horizontal
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ 
-          paddingHorizontal: SPACING.sm, 
+        contentContainerStyle={{
+          paddingHorizontal: SPACING.sm,
           paddingRight: SPACING.xl,
           paddingTop: SPACING.md,
-          paddingBottom: SPACING.sm
+          paddingBottom: SPACING.sm,
         }}
-        data={CATEGORIES}
+        data={categoryItems}
         keyExtractor={(item) => item as string}
         onContentSizeChange={(w) => setContentWidth(w)}
         onLayout={(e) => setVisibleWidth(e.nativeEvent.layout.width)}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false }
+          { useNativeDriver: false },
         )}
         scrollEventThrottle={16}
         renderItem={({ item }) => {
@@ -111,24 +122,51 @@ export default function POSCategories() {
       />
 
       {showIndicator && (
-        <Animated.View style={[styles.chevronContainer, styles.chevronLeft, { opacity: leftChevronOpacity }]}>
-          <TouchableOpacity onPress={() => scrollBy(-150)} style={styles.chevronTouchable}>
+        <Animated.View
+          style={[
+            styles.chevronContainer,
+            styles.chevronLeft,
+            { opacity: leftChevronOpacity },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => scrollBy(-150)}
+            style={styles.chevronTouchable}
+          >
             <Ionicons name="chevron-back" size={20} color={COLORS.textLight} />
           </TouchableOpacity>
         </Animated.View>
       )}
 
       {showIndicator && (
-        <Animated.View style={[styles.chevronContainer, styles.chevronRight, { opacity: rightChevronOpacity }]}>
-          <TouchableOpacity onPress={() => scrollBy(150)} style={styles.chevronTouchable}>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textLight} />
+        <Animated.View
+          style={[
+            styles.chevronContainer,
+            styles.chevronRight,
+            { opacity: rightChevronOpacity },
+          ]}
+        >
+          <TouchableOpacity
+            onPress={() => scrollBy(150)}
+            style={styles.chevronTouchable}
+          >
+            <Ionicons
+              name="chevron-forward"
+              size={20}
+              color={COLORS.textLight}
+            />
           </TouchableOpacity>
         </Animated.View>
       )}
-      
+
       {showIndicator && (
         <View style={styles.scrollTrack}>
-          <Animated.View style={[styles.scrollThumb, { width: thumbWidth, transform: [{ translateX }] }]} />
+          <Animated.View
+            style={[
+              styles.scrollThumb,
+              { width: thumbWidth, transform: [{ translateX }] },
+            ]}
+          />
         </View>
       )}
     </View>
@@ -151,47 +189,47 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  categoryPillActive: { 
+  categoryPillActive: {
     backgroundColor: COLORS.primary,
     borderColor: COLORS.primary,
   },
-  categoryText: { 
-    color: COLORS.text, 
+  categoryText: {
+    color: COLORS.text,
     fontWeight: TYPOGRAPHY.weights.semibold,
     fontSize: TYPOGRAPHY.sizes.sm,
   },
-  categoryTextActive: { 
-    color: COLORS.cream 
+  categoryTextActive: {
+    color: COLORS.cream,
   },
   scrollTrack: {
     width: 50,
     height: 4,
     backgroundColor: COLORS.border,
     borderRadius: 2,
-    alignSelf: 'center',
+    alignSelf: "center",
     marginBottom: SPACING.sm,
   },
   scrollThumb: {
-    height: '100%',
+    height: "100%",
     backgroundColor: COLORS.primary,
     borderRadius: 2,
   },
   chevronContainer: {
-    position: 'absolute',
+    position: "absolute",
     top: SPACING.md,
     height: 34,
     width: 34,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)', 
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderRadius: 17,
   },
   chevronLeft: { left: SPACING.xs },
   chevronRight: { right: SPACING.xs },
   chevronTouchable: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: "100%",
+    height: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
