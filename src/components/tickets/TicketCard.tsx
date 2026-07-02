@@ -1,11 +1,23 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, ScrollView, Platform, Alert } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Order, usePOSStore } from '../../store/usePOSStore';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
-import AppText from '../ui/AppText';
-import VoidReasonModal, { VoidReason } from './VoidReasonModal';
-import ConfirmModal from '../ui/ConfirmModal';
+import React, { useState } from "react";
+import {
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Platform,
+  Alert,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { Order, usePOSStore } from "../../store/usePOSStore";
+import {
+  COLORS,
+  TYPOGRAPHY,
+  SPACING,
+  BORDER_RADIUS,
+} from "../../constants/theme";
+import AppText from "../ui/AppText";
+import VoidReasonModal, { VoidReason } from "./VoidReasonModal";
+import ConfirmModal from "../ui/ConfirmModal";
 
 interface TicketCardProps {
   order: Order;
@@ -21,26 +33,43 @@ export default function TicketCard({ order, width }: TicketCardProps) {
     setIsCompleteModalVisible(true);
   };
 
-  const executeComplete = () => {
+  const executeComplete = async () => {
     setIsCompleteModalVisible(false);
-    updateOrderStatus(order.id, 'Completed');
-    showToast(`Order ${order.id} marked as completed`);
+    try {
+      await updateOrderStatus(order.id, "Completed");
+      showToast(`Order ${order.order_number} marked as completed`);
+    } catch (err) {
+      console.error("Failed to complete order:", err);
+    }
   };
 
-  const handleVoidConfirm = (reason: VoidReason) => {
-    updateOrderStatus(order.id, reason);
-    setIsVoidModalVisible(false);
-    showToast(`Order ${order.id} has been voided`);
+  const handleVoidConfirm = async (reason: VoidReason) => {
+    try {
+      await updateOrderStatus(order.id, reason);
+      setIsVoidModalVisible(false);
+      showToast(`Order ${order.order_number} has been voided`);
+    } catch (err) {
+      console.error("Failed to void order:", err);
+    }
   };
 
-  const formattedTime = new Date(order.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formattedTime = new Date(order.timestamp).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   const handlePrint = () => {
-    Alert.alert('Print Receipt', `Printing ticket #${order.id}...`, [{ text: 'OK' }]);
+    Alert.alert("Print Receipt", `Printing ticket #${order.order_number}...`, [
+      { text: "OK" },
+    ]);
   };
 
   const handleSave = () => {
-    Alert.alert('Save Receipt', `Ticket #${order.id} saved to device.`, [{ text: 'OK' }]);
+    Alert.alert(
+      "Save Receipt",
+      `Ticket #${order.order_number} saved to device.`,
+      [{ text: "OK" }],
+    );
   };
 
   return (
@@ -48,30 +77,44 @@ export default function TicketCard({ order, width }: TicketCardProps) {
       <View style={styles.card}>
         <View style={styles.header}>
           <View>
-            <AppText style={styles.orderNumber}>{order.id}</AppText>
+            <AppText style={styles.orderNumber}>{order.order_number}</AppText>
             <AppText style={styles.time}>{formattedTime}</AppText>
             {order.customerName && (
-              <AppText style={styles.customerName}>For: {order.customerName}</AppText>
+              <AppText style={styles.customerName}>
+                For: {order.customerName}
+              </AppText>
             )}
-            <AppText style={styles.paymentMethod}>Paid via: {order.paymentMethod}</AppText>
+            <AppText style={styles.paymentMethod}>
+              Paid via: {order.paymentMethod}
+            </AppText>
           </View>
-          <View style={[
-            styles.statusBadge, 
-            order.status === 'Completed' ? styles.statusCompleted :
-            order.status.includes('Voided') ? styles.statusVoided :
-            styles.statusCurrent
-          ]}>
-            <AppText style={[
-              styles.statusText,
-              order.status === 'Completed' ? styles.statusTextCompleted :
-              order.status.includes('Voided') ? styles.statusTextVoided :
-              styles.statusTextCurrent
-            ]}>{order.status}</AppText>
+          <View
+            style={[
+              styles.statusBadge,
+              order.status === "Completed"
+                ? styles.statusCompleted
+                : order.status.includes("Void")
+                  ? styles.statusVoided
+                  : styles.statusCurrent,
+            ]}
+          >
+            <AppText
+              style={[
+                styles.statusText,
+                order.status === "Completed"
+                  ? styles.statusTextCompleted
+                  : order.status.includes("Void")
+                    ? styles.statusTextVoided
+                    : styles.statusTextCurrent,
+              ]}
+            >
+              {order.status}
+            </AppText>
           </View>
         </View>
 
-        <ScrollView 
-          style={styles.itemsContainer} 
+        <ScrollView
+          style={styles.itemsContainer}
           showsVerticalScrollIndicator={true}
           nestedScrollEnabled={true}
           contentContainerStyle={styles.scrollContent}
@@ -86,10 +129,14 @@ export default function TicketCard({ order, width }: TicketCardProps) {
                 {item.options && (
                   <AppText style={styles.itemOptions}>
                     {[
-                      item.options.size !== 'One Size' ? item.options.size : null,
-                      item.options.temp !== 'None' ? item.options.temp : null,
-                      item.options.addon ? 'Honey' : null
-                    ].filter(Boolean).join(' • ')}
+                      item.options.size !== "One Size"
+                        ? item.options.size
+                        : null,
+                      item.options.temp !== "None" ? item.options.temp : null,
+                      item.options.addon ? "Honey" : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" • ")}
                   </AppText>
                 )}
               </View>
@@ -103,33 +150,43 @@ export default function TicketCard({ order, width }: TicketCardProps) {
             <AppText style={styles.iconBtnText}>Print</AppText>
           </TouchableOpacity>
           <TouchableOpacity style={styles.iconBtn} onPress={handleSave}>
-            <Ionicons name="download-outline" size={20} color={COLORS.espresso} />
+            <Ionicons
+              name="download-outline"
+              size={20}
+              color={COLORS.espresso}
+            />
             <AppText style={styles.iconBtnText}>Save</AppText>
           </TouchableOpacity>
         </View>
 
-        {order.status === 'Current' && (
+        {order.status === "Current" && (
           <View style={styles.actions}>
-            <TouchableOpacity style={styles.voidBtn} onPress={() => setIsVoidModalVisible(true)}>
+            <TouchableOpacity
+              style={styles.voidBtn}
+              onPress={() => setIsVoidModalVisible(true)}
+            >
               <AppText style={styles.voidBtnText}>Void</AppText>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.completeBtn} onPress={handleComplete}>
+            <TouchableOpacity
+              style={styles.completeBtn}
+              onPress={handleComplete}
+            >
               <AppText style={styles.completeBtnText}>Complete Order</AppText>
             </TouchableOpacity>
           </View>
         )}
       </View>
 
-      <VoidReasonModal 
-        visible={isVoidModalVisible} 
-        onClose={() => setIsVoidModalVisible(false)} 
-        onConfirm={handleVoidConfirm} 
+      <VoidReasonModal
+        visible={isVoidModalVisible}
+        onClose={() => setIsVoidModalVisible(false)}
+        onConfirm={handleVoidConfirm}
       />
 
       <ConfirmModal
         visible={isCompleteModalVisible}
         title="Complete Order"
-        message={`Are you sure you want to mark order ${order.id} as completed?`}
+        message={`Are you sure you want to mark order ${order.order_number} as completed?`}
         confirmText="Complete"
         onCancel={() => setIsCompleteModalVisible(false)}
         onConfirm={executeComplete}
@@ -141,7 +198,7 @@ export default function TicketCard({ order, width }: TicketCardProps) {
 const styles = StyleSheet.create({
   cardWrapper: {
     padding: SPACING.md,
-    height: '100%',
+    height: "100%",
   },
   card: {
     flex: 1,
@@ -157,9 +214,9 @@ const styles = StyleSheet.create({
     borderColor: COLORS.stone200,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     borderBottomWidth: 1,
     borderBottomColor: COLORS.stone200,
     paddingBottom: SPACING.md,
@@ -195,7 +252,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.stone200,
   },
   statusCompleted: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: "#E8F5E9",
   },
   statusVoided: {
     backgroundColor: COLORS.roseBlushSoft,
@@ -205,7 +262,7 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.weights.bold,
   },
   statusTextCurrent: { color: COLORS.espresso },
-  statusTextCompleted: { color: '#2E7D32' },
+  statusTextCompleted: { color: "#2E7D32" },
   statusTextVoided: { color: COLORS.roseDeep },
   itemsContainer: {
     flex: 1,
@@ -215,9 +272,9 @@ const styles = StyleSheet.create({
     paddingRight: SPACING.xs,
   },
   itemRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     marginBottom: SPACING.md,
-    alignItems: 'flex-start',
+    alignItems: "flex-start",
   },
   qtyBadge: {
     backgroundColor: COLORS.stone100,
@@ -245,7 +302,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   actions: {
-    flexDirection: 'row',
+    flexDirection: "row",
     borderTopWidth: 1,
     borderTopColor: COLORS.stone200,
     paddingTop: SPACING.md,
@@ -258,7 +315,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.roseDeep,
     borderRadius: BORDER_RADIUS.md,
-    alignItems: 'center',
+    alignItems: "center",
   },
   voidBtnText: {
     color: COLORS.roseDeep,
@@ -270,7 +327,7 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.primary,
     borderRadius: BORDER_RADIUS.md,
     paddingVertical: SPACING.md,
-    alignItems: 'center',
+    alignItems: "center",
   },
   completeBtnText: {
     color: COLORS.surface,
@@ -278,8 +335,8 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.md,
   },
   receiptActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
+    flexDirection: "row",
+    justifyContent: "flex-start",
     borderTopWidth: 1,
     borderTopColor: COLORS.stone200,
     paddingTop: SPACING.md,
@@ -287,8 +344,8 @@ const styles = StyleSheet.create({
     gap: SPACING.lg,
   },
   iconBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingVertical: SPACING.xs,
   },
@@ -296,5 +353,5 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.sm,
     fontWeight: TYPOGRAPHY.weights.semibold,
     color: COLORS.espresso,
-  }
+  },
 });

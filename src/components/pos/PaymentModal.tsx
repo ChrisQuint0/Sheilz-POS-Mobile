@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   methodCard: {
-    width: "47%", // slightly less than 50% to account for gap
+    width: "47%",
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.stone200,

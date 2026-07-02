@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import { createOrder, updateOrderStatus as updateOrderStatusInDb, listOrders } from '../services/orderRepository';
 
 export interface ProductSizeOption {
   id: string;
@@ -55,10 +56,11 @@ export interface CartItem {
   quantity: number;
 }
 
-export type OrderStatus = 'Current' | 'Completed' | 'Voided (Not Made)' | 'Voided (Consumed)';
+export type OrderStatus = 'Current' | 'Completed' | 'Void (Not Made)' | 'Void (Consumed)';
 
 export interface Order {
-  id: string; // Order number (e.g., #0001)
+  id: string;
+  order_number: string;
   items: CartItem[];
   totalAmount: number;
   paymentMethod: string;
@@ -114,8 +116,10 @@ interface POSState {
 
   // Orders
   orders: Order[];
-  placeOrder: (paymentMethod: string, orderNumber: string, customerName?: string) => void;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  setOrders: (orders: Order[]) => void;
+  hydrateOrders: () => Promise<void>;
+  placeOrder: (paymentMethod: string, orderNumber: string, customerName?: string) => Promise<void>;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
 }
 
 const getTodayString = () => {
@@ -218,22 +222,30 @@ export const usePOSStore = create<POSState>((set, get) => ({
   setCashierName: (name) => set({ cashierName: name }),
 
   orders: [],
-  placeOrder: (paymentMethod, orderNumber, customerName) => set((state) => {
-    const newOrder: Order = {
-      id: orderNumber,
-      items: [...state.cart],
-      totalAmount: state.cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0),
+  setOrders: (orders) => set({ orders }),
+  hydrateOrders: async () => {
+    const orders = await listOrders();
+    set({ orders });
+  },
+  placeOrder: async (paymentMethod, orderNumber, customerName) => {
+    const state = get();
+    const newOrder = await createOrder(
+      state.cart,
+      orderNumber,
       paymentMethod,
-      customerName: customerName || undefined,
-      status: 'Current',
-      timestamp: new Date().toISOString(),
-    };
-    return {
-      orders: [newOrder, ...state.orders], // Prepended so newest is first
-      cart: [], // Clear the cart
-    };
-  }),
-  updateOrderStatus: (orderId, status) => set((state) => ({
-    orders: state.orders.map(o => o.id === orderId ? { ...o, status } : o)
-  })),
+      state.userId,
+      state.cashierName,
+      customerName
+    );
+    set((s) => ({
+      orders: [newOrder, ...s.orders],
+      cart: [],
+    }));
+  },
+  updateOrderStatus: async (orderId, status) => {
+    await updateOrderStatusInDb(orderId, status);
+    set((state) => ({
+      orders: state.orders.map((o) => (o.id === orderId ? { ...o, status } : o)),
+    }));
+  },
 }));
