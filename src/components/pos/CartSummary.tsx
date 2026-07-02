@@ -57,11 +57,18 @@ export default function CartSummary({
     setIsPaymentModalVisible(true);
   };
 
-  const handlePaymentConfirm = (method: string, customerName?: string) => {
+  const handlePaymentConfirm = async (
+    method: string,
+    customerName?: string,
+  ) => {
     setIsPaymentModalVisible(false);
 
-    // Save order
-    placeOrder(method, orderNumber, customerName);
+    try {
+      await placeOrder(method, orderNumber, customerName);
+    } catch (err) {
+      console.error("Failed to place order:", err);
+      return; // don't clear order number or fire onChargeComplete if the write failed
+    }
 
     setOrderNumber("");
     if (onChargeComplete) {
