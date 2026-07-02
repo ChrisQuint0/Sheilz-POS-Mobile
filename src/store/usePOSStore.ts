@@ -1,20 +1,50 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 
+export interface ProductSizeOption {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface ProductTemperatureOption {
+  id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface ProductVariant {
+  id: string;
+  price: number;
+  size: ProductSizeOption | null;
+  temperature: ProductTemperatureOption | null;
+}
+
 export interface MenuItem {
   id: string;
   name: string;
-  category: string;
-  price: number;
-  image: string;
+  category: string; // category name (denormalized for filtering/display)
+  category_id: string;
+  price: number; // lowest variant price — used for card display only
+  image: string | null;
+  variants: ProductVariant[];
 }
 
-import { Size, Temp } from '../constants/pricing';
+export interface ProductCategory {
+  id: string;
+  name: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  name: string;
+  is_enabled: boolean;
+}
 
 export interface CartItemOptions {
-  size?: Size;
-  temp?: Temp;
-  addon?: boolean;
+  size?: string;
+  temp?: string;
+  addon?: boolean; // unused for now — no add-on table exists in the DB yet
 }
 
 export interface CartItem {

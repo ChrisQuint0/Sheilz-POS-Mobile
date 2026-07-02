@@ -1,7 +1,12 @@
-import React from 'react';
-import { View, StyleSheet, Modal, TouchableOpacity } from 'react-native';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
-import AppText from './AppText';
+import React from "react";
+import { View, StyleSheet, Modal, TouchableOpacity } from "react-native";
+import {
+  COLORS,
+  TYPOGRAPHY,
+  SPACING,
+  BORDER_RADIUS,
+} from "../../constants/theme";
+import AppText from "./AppText";
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -12,14 +17,26 @@ interface ConfirmModalProps {
   confirmText?: string;
 }
 
-export default function ConfirmModal({ visible, title, message, onCancel, onConfirm, confirmText = "Confirm" }: ConfirmModalProps) {
+export default function ConfirmModal({
+  visible,
+  title,
+  message,
+  onCancel,
+  onConfirm,
+  confirmText = "Confirm",
+}: ConfirmModalProps) {
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
       <View style={styles.overlay}>
         <View style={styles.modalContent}>
           <AppText style={styles.title}>{title}</AppText>
           <AppText style={styles.message}>{message}</AppText>
-          
+
           <View style={styles.actions}>
             <TouchableOpacity style={styles.cancelBtn} onPress={onCancel}>
               <AppText style={styles.cancelBtnText}>Cancel</AppText>
@@ -37,12 +54,12 @@ export default function ConfirmModal({ visible, title, message, onCancel, onConf
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalContent: {
-    width: '85%',
+    width: "85%",
     maxWidth: 400,
     backgroundColor: COLORS.surface,
     borderRadius: BORDER_RADIUS.xl,
@@ -66,15 +83,15 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   actions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: SPACING.md,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: SPACING.lg,
   },
   cancelBtn: {
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
     borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.stone100,
+    backgroundColor: COLORS.stone200,
   },
   cancelBtnText: {
     color: COLORS.text,
@@ -82,14 +99,13 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.md,
   },
   confirmBtn: {
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     paddingHorizontal: SPACING.lg,
-    borderRadius: BORDER_RADIUS.md,
+    borderRadius: BORDER_RADIUS.sm,
     backgroundColor: COLORS.primary,
   },
   confirmBtnText: {
     color: COLORS.surface,
-    fontWeight: TYPOGRAPHY.weights.bold,
     fontSize: TYPOGRAPHY.sizes.md,
-  }
+  },
 });

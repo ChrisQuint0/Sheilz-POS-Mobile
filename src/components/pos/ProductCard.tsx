@@ -1,9 +1,14 @@
-import React from 'react';
-import { View, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { MenuItem, usePOSStore } from '../../store/usePOSStore';
-import { COLORS, TYPOGRAPHY, SPACING, BORDER_RADIUS } from '../../constants/theme';
-import AppText from '../ui/AppText';
+import React from "react";
+import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { MenuItem, usePOSStore } from "../../store/usePOSStore";
+import {
+  COLORS,
+  TYPOGRAPHY,
+  SPACING,
+  BORDER_RADIUS,
+} from "../../constants/theme";
+import AppText from "../ui/AppText";
 
 interface ProductCardProps {
   item: MenuItem;
@@ -12,12 +17,13 @@ interface ProductCardProps {
 
 export default function ProductCard({ item, onSelect }: ProductCardProps) {
   const { cart } = usePOSStore();
-  const quantityInCart = cart.filter(c => c.item.id === item.id).reduce((sum, c) => sum + c.quantity, 0);
+  const quantityInCart = cart
+    .filter((c) => c.item.id === item.id)
+    .reduce((sum, c) => sum + c.quantity, 0);
 
   return (
     <TouchableOpacity style={styles.card} onPress={() => onSelect(item)}>
       <View style={styles.imageContainer}>
-        <Image source={{ uri: item.image }} style={styles.cardImage} />
         {quantityInCart > 0 && (
           <View style={styles.badge}>
             <AppText style={styles.badgeText}>{quantityInCart}</AppText>
@@ -60,19 +66,19 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     backgroundColor: COLORS.stone200,
   },
-  cardInfo: { 
-    flex: 1, 
-    marginLeft: SPACING.md 
+  cardInfo: {
+    flex: 1,
+    marginLeft: SPACING.md,
   },
-  cardTitle: { 
-    fontSize: TYPOGRAPHY.sizes.md, 
-    fontWeight: TYPOGRAPHY.weights.semibold, 
-    color: COLORS.text 
+  cardTitle: {
+    fontSize: TYPOGRAPHY.sizes.md,
+    fontWeight: TYPOGRAPHY.weights.semibold,
+    color: COLORS.text,
   },
-  cardCategory: { 
-    fontSize: TYPOGRAPHY.sizes.xs, 
-    color: COLORS.textLight, 
-    marginTop: 2 
+  cardCategory: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: COLORS.textLight,
+    marginTop: 2,
   },
   cardPrice: {
     fontSize: TYPOGRAPHY.sizes.md,
@@ -89,18 +95,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   imageContainer: {
-    position: 'relative',
+    position: "relative",
   },
   badge: {
-    position: 'absolute',
+    position: "absolute",
     top: -6,
     right: -6,
     backgroundColor: COLORS.primary,
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 2,
     borderColor: COLORS.surface,
     paddingHorizontal: 4,
@@ -108,6 +114,6 @@ const styles = StyleSheet.create({
   badgeText: {
     color: COLORS.surface,
     fontSize: 10,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });
