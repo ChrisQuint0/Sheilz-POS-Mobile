@@ -63,6 +63,7 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   );
 }
 
+
 export async function listOrders(): Promise<Order[]> {
   const db = await getDB();
   const orderRows = await db.getAllAsync<any>(`SELECT * FROM orders ORDER BY created_at DESC`);

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { runSync, getQueueStats } from '../services/syncService';
 
 export type SyncStatus = 'Online' | 'Offline' | 'Synced' | 'Syncing' | 'Pending Sync' | 'Sync Failed';
 
@@ -15,16 +16,16 @@ interface SyncState {
   // Current Status
   status: SyncStatus;
   lastSyncTimestamp: string | null;
-  
+
   // Queue metrics
   pendingTransactions: number;
   pendingInventory: number;
   failedRecords: number;
-  
+
   // Auto Management
   isAutoSyncEnabled: boolean;
   isNetworkConnected: boolean;
-  
+
   // History
   syncHistory: SyncHistoryEvent[];
 
@@ -33,10 +34,7 @@ interface SyncState {
   retryFailed: () => Promise<void>;
   toggleAutoSync: () => void;
   setNetworkStatus: (isConnected: boolean) => void;
-  
-  // Mock actions to manipulate the queue
-  addPendingTransaction: (count?: number) => void;
-  addFailedRecord: (count?: number) => void;
+  hydrateStats: () => Promise<void>;
   clearHistory: () => void;
 }
 
@@ -44,105 +42,97 @@ const generateId = () => Math.random().toString(36).substr(2, 9);
 
 export const useSyncStore = create<SyncState>((set, get) => ({
   status: 'Synced',
-  lastSyncTimestamp: new Date().toISOString(),
+  lastSyncTimestamp: null,
   pendingTransactions: 0,
+  // Inventory sync is out of scope (no inventory queue exists yet on mobile —
+  // see plan.md "Out of scope"). Kept as a field so the UI/stats-row shape
+  // is unchanged; always 0 until that scope exists.
   pendingInventory: 0,
   failedRecords: 0,
   isAutoSyncEnabled: true,
   isNetworkConnected: true,
   syncHistory: [],
 
+  hydrateStats: async () => {
+    const stats = await getQueueStats();
+    set((state) => ({
+      pendingTransactions: stats.pending,
+      failedRecords: stats.failed,
+      lastSyncTimestamp: stats.lastSyncedAt ?? state.lastSyncTimestamp,
+      status:
+        state.status === 'Syncing'
+          ? state.status
+          : !state.isNetworkConnected
+          ? 'Offline'
+          : stats.failed > 0
+          ? 'Sync Failed'
+          : stats.pending > 0
+          ? 'Pending Sync'
+          : 'Synced',
+    }));
+  },
+
   syncNow: async () => {
-    const { status, pendingTransactions, pendingInventory, isNetworkConnected } = get();
-    
-    if (status === 'Syncing' || (!pendingTransactions && !pendingInventory && get().failedRecords === 0)) return;
+    const { status, isNetworkConnected, pendingTransactions, failedRecords } = get();
+
+    if (status === 'Syncing') return;
     if (!isNetworkConnected) {
       set({ status: 'Offline' });
       return;
     }
+    if (pendingTransactions === 0 && failedRecords === 0) return;
 
     set({ status: 'Syncing' });
-
-    const totalToSync = pendingTransactions + pendingInventory + get().failedRecords;
     const startTime = Date.now();
 
-    // Mock network request delay (2 seconds)
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const isSuccess = Math.random() > 0.1; // 10% chance to fail for testing UI
+    try {
+      const result = await runSync();
+      const stats = await getQueueStats();
+      const durationMs = Date.now() - startTime;
+      const now = new Date().toISOString();
 
-        const durationMs = Date.now() - startTime;
-        const now = new Date().toISOString();
+      const newEvent: SyncHistoryEvent = {
+        id: generateId(),
+        timestamp: now,
+        recordsUploaded: result.synced,
+        durationMs,
+        result: result.failed === 0 ? 'Success' : 'Failed',
+        failureReason:
+          result.failed > 0 ? stats.lastError ?? 'Some records could not be synchronized.' : undefined,
+      };
 
-        if (isSuccess) {
-          const newEvent: SyncHistoryEvent = {
-            id: generateId(),
-            timestamp: now,
-            recordsUploaded: totalToSync,
-            durationMs,
-            result: 'Success',
-          };
-
-          set((state) => ({
-            status: 'Synced',
-            lastSyncTimestamp: now,
-            pendingTransactions: 0,
-            pendingInventory: 0,
-            failedRecords: 0,
-            syncHistory: [newEvent, ...state.syncHistory].slice(0, 50), // keep last 50
-          }));
-        } else {
-          const newEvent: SyncHistoryEvent = {
-            id: generateId(),
-            timestamp: now,
-            recordsUploaded: 0,
-            durationMs,
-            result: 'Failed',
-            failureReason: 'Network timeout during transaction commit.',
-          };
-
-          set((state) => ({
-            status: 'Sync Failed',
-            failedRecords: state.failedRecords + totalToSync,
-            pendingTransactions: 0,
-            pendingInventory: 0,
-            syncHistory: [newEvent, ...state.syncHistory].slice(0, 50),
-          }));
-        }
-        resolve();
-      }, 2000);
-    });
+      set((state) => ({
+        status: stats.failed > 0 ? 'Sync Failed' : stats.pending > 0 ? 'Pending Sync' : 'Synced',
+        lastSyncTimestamp: stats.lastSyncedAt ?? state.lastSyncTimestamp,
+        pendingTransactions: stats.pending,
+        failedRecords: stats.failed,
+        syncHistory: [newEvent, ...state.syncHistory].slice(0, 50),
+      }));
+    } catch (err: any) {
+      // runSync() itself shouldn't throw (per-batch errors are caught inside
+      // it), but guard against an unexpected failure (e.g. getDB() rejecting)
+      // so status doesn't get stuck on 'Syncing'.
+      set({ status: 'Sync Failed' });
+    }
   },
 
   retryFailed: async () => {
-    // Retry uses the same logic as syncNow for the mock
     await get().syncNow();
   },
 
   toggleAutoSync: () => set((state) => ({ isAutoSyncEnabled: !state.isAutoSyncEnabled })),
 
-  setNetworkStatus: (isConnected: boolean) => set((state) => {
-    if (!isConnected) {
-      return { isNetworkConnected: false, status: 'Offline' };
-    }
-    // If reconnected and have pending, set to Pending Sync
-    const hasPending = state.pendingTransactions > 0 || state.pendingInventory > 0 || state.failedRecords > 0;
-    return {
-      isNetworkConnected: true,
-      status: hasPending ? 'Pending Sync' : 'Synced'
-    };
-  }),
+  setNetworkStatus: (isConnected: boolean) =>
+    set((state) => {
+      if (!isConnected) {
+        return { isNetworkConnected: false, status: 'Offline' };
+      }
+      const hasPending = state.pendingTransactions > 0 || state.failedRecords > 0;
+      return {
+        isNetworkConnected: true,
+        status: hasPending ? 'Pending Sync' : 'Synced',
+      };
+    }),
 
-  // Dev Tools
-  addPendingTransaction: (count = 1) => set((state) => ({
-    pendingTransactions: state.pendingTransactions + count,
-    status: state.isNetworkConnected ? 'Pending Sync' : 'Offline'
-  })),
-
-  addFailedRecord: (count = 1) => set((state) => ({
-    failedRecords: state.failedRecords + count,
-    status: state.isNetworkConnected ? 'Sync Failed' : 'Offline'
-  })),
-  
-  clearHistory: () => set({ syncHistory: [] })
+  clearHistory: () => set({ syncHistory: [] }),
 }));

@@ -83,6 +83,5 @@ export async function syncCatalogFromSupabase(): Promise<SyncResult> {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
     [new Date().toISOString()]
   );
-
   return { success: true };
 }

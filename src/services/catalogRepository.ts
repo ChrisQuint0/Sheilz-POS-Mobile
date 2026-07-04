@@ -16,6 +16,14 @@ export interface CatalogSnapshot {
   paymentMethods: { id: string; name: string; is_enabled: boolean }[];
 }
 
+export async function getLastCatalogSyncAt(): Promise<string | null> {
+  const db = await getDB();
+  const row = await db.getFirstAsync<{ value: string }>(
+    `SELECT value FROM meta WHERE key = 'last_catalog_sync_at'`
+  );
+  return row?.value ?? null;
+}
+
 export async function getCategories(): Promise<ProductCategory[]> {
   const db = await getDB();
   return db.getAllAsync<ProductCategory>(
