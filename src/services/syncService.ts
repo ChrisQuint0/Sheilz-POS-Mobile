@@ -1,5 +1,6 @@
 import { getDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
+import { deductInventoryForOrder } from './inventoryService';
 
 const BATCH_SIZE = 25;
 
@@ -54,8 +55,7 @@ async function doRunSync(): Promise<RunSyncResult> {
     );
 
     try {
-      // Orders first — order_items.order_id is an FK to orders.id,
-      // so the parent row must exist remotely before its children upsert.
+      const now = new Date().toISOString();
       const remoteOrders = batch.map((o) => ({
         id: o.id,
         order_id: o.order_number,
@@ -65,19 +65,91 @@ async function doRunSync(): Promise<RunSyncResult> {
         payment_method: o.payment_method,
         cashier_id: o.cashier_id,
         cashier_name: o.cashier_name,
+        created_by: o.cashier_id,
+        last_modified_by: o.cashier_id,
+        last_modified_at: now,
         created_at: o.created_at,
-        synced_at: new Date().toISOString(),
+        synced_at: now,
       }));
 
-      const { error: ordersError } = await supabase
-        .from('orders')
-        .upsert(remoteOrders, { onConflict: 'id' });
-      if (ordersError) throw new Error(ordersError.message);
+      // Map of local order ID to remote order ID for item syncing
+      const localToRemoteOrderId = new Map<string, string>();
 
+      // Sync orders one by one with proper conflict handling
+      let ordersSyncSuccess = true;
+      let ordersSyncError: any = null;
+
+      for (const order of remoteOrders) {
+        try {
+          // Check if order exists
+          const { data: existingOrder, error: checkError } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('order_id', order.order_id)
+            .maybeSingle();
+
+          if (checkError) {
+            console.error(`Error checking order ${order.order_id}:`, checkError);
+            throw checkError;
+          }
+
+          if (existingOrder) {
+            // Update existing order and track remote ID
+            const remoteOrderId = existingOrder.id;
+            localToRemoteOrderId.set(order.id, remoteOrderId);
+
+            const { error: updateError } = await supabase
+              .from('orders')
+              .update({
+                customer_name: order.customer_name,
+                status: order.status,
+                amount: order.amount,
+                payment_method: order.payment_method,
+                cashier_id: order.cashier_id,
+                cashier_name: order.cashier_name,
+                last_modified_by: order.last_modified_by,
+                last_modified_at: order.last_modified_at,
+                synced_at: order.synced_at,
+              })
+              .eq('order_id', order.order_id);
+
+            if (updateError) {
+              console.error(`Failed to update order ${order.order_id}:`, updateError);
+              throw updateError;
+            }
+            console.log(`Updated existing order: ${order.order_id}`);
+          } else {
+            // Insert new order and track remote ID (same as local in this case)
+            localToRemoteOrderId.set(order.id, order.id);
+
+            const { error: insertError } = await supabase
+              .from('orders')
+              .insert(order);
+
+            if (insertError) {
+              console.error(`Failed to insert order ${order.order_id}:`, insertError);
+              throw insertError;
+            }
+            console.log(`Inserted new order: ${order.order_id}`);
+          }
+        } catch (error) {
+          ordersSyncError = error;
+          ordersSyncSuccess = false;
+          console.error(`Failed to sync order ${order.order_id}:`, error);
+          break; // Exit the loop if any order fails
+        }
+      }
+
+      // If orders sync failed, throw error to mark batch as failed
+      if (!ordersSyncSuccess) {
+        throw new Error(ordersSyncError?.message || 'Failed to sync one or more orders');
+      }
+
+      // Now sync order items since parent orders exist
       if (itemRows.length > 0) {
         const remoteItems = itemRows.map((it) => ({
           id: it.id,
-          order_id: it.order_id,
+          order_id: localToRemoteOrderId.get(it.order_id) || it.order_id,
           product_id: it.product_id,
           name: it.name,
           size: it.size,
@@ -87,13 +159,61 @@ async function doRunSync(): Promise<RunSyncResult> {
           subtotal: it.subtotal,
         }));
 
+        // Try upsert first, fallback to individual if needed
         const { error: itemsError } = await supabase
           .from('order_items')
           .upsert(remoteItems, { onConflict: 'id' });
-        if (itemsError) throw new Error(itemsError.message);
+
+        if (itemsError) {
+          console.error('Order items upsert error:', itemsError);
+          
+          // Fallback to individual inserts/updates
+          console.warn('Trying individual order item inserts...');
+          for (const item of remoteItems) {
+            try {
+              // Check if item exists
+              const { data: existingItem, error: checkError } = await supabase
+                .from('order_items')
+                .select('id')
+                .eq('id', item.id)
+                .maybeSingle();
+
+              if (checkError) {
+                console.error(`Error checking item ${item.id}:`, checkError);
+                throw checkError;
+              }
+
+              if (existingItem) {
+                // Update existing item
+                const { error: updateError } = await supabase
+                  .from('order_items')
+                  .update(item)
+                  .eq('id', item.id);
+
+                if (updateError) {
+                  console.error(`Failed to update item ${item.id}:`, updateError);
+                  throw updateError;
+                }
+              } else {
+                // Insert new item
+                const { error: insertError } = await supabase
+                  .from('order_items')
+                  .insert(item);
+
+                if (insertError) {
+                  console.error(`Failed to insert item ${item.id}:`, insertError);
+                  throw insertError;
+                }
+              }
+            } catch (itemError) {
+              console.error(`Failed to sync item ${item.id}:`, itemError);
+              throw itemError;
+            }
+          }
+        }
       }
 
-      const now = new Date().toISOString();
+      // Update local sync status
       await db.withExclusiveTransactionAsync(async (txn) => {
         for (const o of batch) {
           await txn.runAsync(
@@ -102,9 +222,23 @@ async function doRunSync(): Promise<RunSyncResult> {
           );
         }
       });
+
+      // After successful sync, deduct inventory for completed orders
+      for (const o of batch) {
+        if (o.status === 'Completed') {
+          const result = await deductInventoryForOrder(o.id);
+          if (!result.success) {
+            console.warn(`Inventory deduction failed for order ${o.id}: ${result.error}`);
+            // Note: We don't fail the sync if inventory deduction fails—it's a separate operation
+            // The order is already synced; the deduction failure should be logged but not block sync
+          }
+        }
+      }
+
       synced += batch.length;
     } catch (err: any) {
       const message = err?.message ?? 'Unknown sync error';
+      console.error('Sync error for batch:', message);
       await db.withExclusiveTransactionAsync(async (txn) => {
         for (const o of batch) {
           await txn.runAsync(

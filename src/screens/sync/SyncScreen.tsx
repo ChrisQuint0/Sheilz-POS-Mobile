@@ -29,7 +29,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { DrawerNavigationProp } from "@react-navigation/drawer";
 import { styles } from "./SyncScreen.styles";
-
 // ─── Status Helpers ─────────────────────────────────────────────
 const STATUS_CONFIG: Record<
   SyncStatus,

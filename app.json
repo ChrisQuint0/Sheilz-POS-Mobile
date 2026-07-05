@@ -21,14 +21,22 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.sheilzposmobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-font",
-      "expo-sqlite"
-    ]
+      "expo-sqlite",
+      "expo-background-task"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "5f48fb30-f928-4a8b-b2cd-21e5a38b0878"
+      }
+    },
+    "owner": "ipei"
   }
 }

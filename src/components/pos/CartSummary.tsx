@@ -101,7 +101,7 @@ export default function CartSummary({
         data={cart}
         contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
         showsVerticalScrollIndicator={true}
-        keyExtractor={(item) => item.item.id}
+        keyExtractor={(item) => item.cartItemId}
         renderItem={({ item }) => (
           <View style={styles.cartItem}>
             <View style={styles.cartItemMain}>
