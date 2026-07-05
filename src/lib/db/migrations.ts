@@ -7,6 +7,25 @@ type Migration = {
 
 const MIGRATIONS: Migration[] = [
   {
+    version: 2,
+    // One-shot cleanup: removes any rows left behind by the temporary
+    // devSeed.ts harness (TEST-* order_numbers, plus their child
+    // order_items). The test harness file has been deleted; this
+    // migration handles the device-local SQLite side. Supabase side
+    // was cleaned by hand via:
+    //   DELETE FROM order_items WHERE order_id IN
+    //     (SELECT id FROM orders WHERE order_id LIKE 'TEST-%');
+    //   DELETE FROM orders WHERE order_id LIKE 'TEST-%';
+    // Safe to keep around as a migration — it's idempotent (no rows
+    // match after the first run).
+    sql: `
+      DELETE FROM order_items
+      WHERE order_id IN (SELECT id FROM orders WHERE order_number LIKE 'TEST-%');
+
+      DELETE FROM orders WHERE order_number LIKE 'TEST-%';
+    `,
+  },
+  {
     version: 1,
     sql: `
       CREATE TABLE IF NOT EXISTS migrations (
