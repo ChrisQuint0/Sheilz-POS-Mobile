@@ -11,6 +11,7 @@ import {
 } from "@expo-google-fonts/plus-jakarta-sans";
 import { getDB } from "./src/lib/db";
 import { usePOSStore } from "./src/store/usePOSStore";
+import { useAppStateSync } from "./src/hooks/useAppStateSync";
 
 export default function App() {
   let [fontsLoaded] = useFonts({
@@ -22,9 +23,16 @@ export default function App() {
 
   useEffect(() => {
     getDB()
-      .then(() => usePOSStore.getState().hydrateOrders())
+      .then(() =>
+        Promise.all([
+          usePOSStore.getState().hydrateOrders(),
+          usePOSStore.getState().initOrderSequence(),
+        ]),
+      )
       .catch((err) => console.error("DB init failed:", err));
   }, []);
+
+  useAppStateSync(); // ← added
 
   if (!fontsLoaded) {
     return null; // Or a splash screen

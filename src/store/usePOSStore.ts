@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
+import { getDB } from '../lib/db';
 import { createOrder, updateOrderStatus as updateOrderStatusInDb, listOrders } from '../services/orderRepository';
 
 export interface ProductSizeOption {
@@ -109,6 +110,13 @@ interface POSState {
   orderSequence: number;
   lastOrderDate: string;
   generateOrderNumber: () => string;
+  // Seeds the in-memory orderSequence counter from SQLite so the next
+  // generated number is one higher than the highest existing YYYYMMDD-NNN
+  // in `orders`. Called once on app boot, in parallel with hydrateOrders().
+  // Without this, a kill+relaunch resets the counter to 1 and the very
+  // first order collides with any existing YYYYMMDD-001 in SQLite
+  // (UNIQUE constraint on orders.order_number).
+  initOrderSequence: () => Promise<void>;
   
   // User Profile
   cashierName: string;
@@ -202,20 +210,53 @@ export const usePOSStore = create<POSState>((set, get) => ({
   generateOrderNumber: () => {
     const today = getTodayString();
     let currentSequence = get().orderSequence;
-    
+
     // Reset sequence if it's a new day
     if (get().lastOrderDate !== today) {
       currentSequence = 1;
     }
 
     const orderNumber = `${today}-${currentSequence.toString().padStart(3, '0')}`;
-    
-    set({ 
+
+    set({
       orderSequence: currentSequence + 1,
-      lastOrderDate: today 
+      lastOrderDate: today
     });
-    
+
     return orderNumber;
+  },
+
+  initOrderSequence: async () => {
+    const today = getTodayString();
+    const prefix = `${today}-`;
+    try {
+      const db = await getDB();
+      // Highest order_number for today, if any. order_number is
+      // TEXT UNIQUE, lexicographic sort works because the YYYYMMDD-
+      // prefix is identical and the suffix is zero-padded to 3 digits.
+      const row = await db.getFirstAsync<{ order_number: string | null }>(
+        `SELECT order_number FROM orders
+         WHERE order_number LIKE ?
+         ORDER BY order_number DESC
+         LIMIT 1`,
+        `${prefix}%`
+      );
+      if (row?.order_number) {
+        const lastSeq = parseInt(row.order_number.slice(prefix.length), 10);
+        if (Number.isFinite(lastSeq) && lastSeq > 0) {
+          set({ orderSequence: lastSeq + 1, lastOrderDate: today });
+          return;
+        }
+      }
+      // No orders today yet — leave the defaults (orderSequence: 1,
+      // lastOrderDate: today, both already initialized at store create).
+    } catch (err) {
+      // If the lookup fails, fall through to defaults rather than
+      // blocking app boot. The first generated number may still
+      // collide, but a single UNIQUE failure is recoverable; a stuck
+      // splash is not.
+      console.error('initOrderSequence failed:', err);
+    }
   },
 
   cashierName: 'Joshua T.',
