@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -18,6 +18,10 @@ import {
 import AppText from "../ui/AppText";
 import VoidReasonModal, { VoidReason } from "./VoidReasonModal";
 import ConfirmModal from "../ui/ConfirmModal";
+import {
+  buildTicketFilename,
+  saveTicketImage,
+} from "../../utils/saveTicketImage";
 
 interface TicketCardProps {
   order: Order;
@@ -28,6 +32,8 @@ export default function TicketCard({ order, width }: TicketCardProps) {
   const { updateOrderStatus, showToast } = usePOSStore();
   const [isVoidModalVisible, setIsVoidModalVisible] = useState(false);
   const [isCompleteModalVisible, setIsCompleteModalVisible] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const cardRef = useRef<View>(null);
 
   const handleComplete = () => {
     setIsCompleteModalVisible(true);
@@ -64,17 +70,30 @@ export default function TicketCard({ order, width }: TicketCardProps) {
     ]);
   };
 
-  const handleSave = () => {
-    Alert.alert(
-      "Save Receipt",
-      `Ticket #${order.order_number} saved to device.`,
-      [{ text: "OK" }],
-    );
+  const handleSave = async () => {
+    if (isSaving || !cardRef.current) return;
+    setIsSaving(true);
+    try {
+      const uri = await saveTicketImage(
+        cardRef,
+        buildTicketFilename(order.order_number),
+      );
+      if (uri) {
+        showToast(`Ticket #${order.order_number} saved to your photos`);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save ticket image.";
+      console.error("Failed to save ticket image:", err);
+      showToast(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <View style={[styles.cardWrapper, { width }]}>
-      <View style={styles.card}>
+      <View ref={cardRef} collapsable={false} style={styles.card}>
         <View style={styles.header}>
           <View>
             <AppText style={styles.orderNumber}>{order.order_number}</AppText>
@@ -149,13 +168,24 @@ export default function TicketCard({ order, width }: TicketCardProps) {
             <Ionicons name="print-outline" size={20} color={COLORS.espresso} />
             <AppText style={styles.iconBtnText}>Print</AppText>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.iconBtn} onPress={handleSave}>
+          <TouchableOpacity
+            style={[styles.iconBtn, isSaving && styles.iconBtnDisabled]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
             <Ionicons
-              name="download-outline"
+              name={isSaving ? "cloud-download-outline" : "download-outline"}
               size={20}
-              color={COLORS.espresso}
+              color={isSaving ? COLORS.textLight : COLORS.espresso}
             />
-            <AppText style={styles.iconBtnText}>Save</AppText>
+            <AppText
+              style={[
+                styles.iconBtnText,
+                isSaving && styles.iconBtnTextDisabled,
+              ]}
+            >
+              {isSaving ? "Saving..." : "Save"}
+            </AppText>
           </TouchableOpacity>
         </View>
 
@@ -349,9 +379,15 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: SPACING.xs,
   },
+  iconBtnDisabled: {
+    opacity: 0.5,
+  },
   iconBtnText: {
     fontSize: TYPOGRAPHY.sizes.sm,
     fontWeight: TYPOGRAPHY.weights.semibold,
     color: COLORS.espresso,
+  },
+  iconBtnTextDisabled: {
+    color: COLORS.textLight,
   },
 });
