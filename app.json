@@ -30,7 +30,15 @@
     "plugins": [
       "expo-font",
       "expo-sqlite",
-      "expo-background-task"
+      "expo-background-task",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Sheilz POS to access your photos.",
+          "savePhotosPermission": "Allow Sheilz POS to save ticket receipts to your photos.",
+          "isAccessMediaLocationEnabled": false
+        }
+      ]
     ],
     "extra": {
       "eas": {
