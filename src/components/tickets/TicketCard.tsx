@@ -53,7 +53,16 @@ export default function TicketCard({ order, width }: TicketCardProps) {
     try {
       await updateOrderStatus(order.id, reason);
       setIsVoidModalVisible(false);
-      showToast(`Order ${order.order_number} has been voided`);
+      // "Void (Consumed)" still deducts stock on sync (ingredients were used).
+      // "Void (Not Made)" does not (food was never prepared). Make this
+      // explicit so cashiers aren't surprised by the inventory side-effect.
+      if (reason === "Void (Consumed)") {
+        showToast(
+          `Order ${order.order_number} voided — ingredients will be deducted from inventory on sync`,
+        );
+      } else {
+        showToast(`Order ${order.order_number} has been voided`);
+      }
     } catch (err) {
       console.error("Failed to void order:", err);
     }
