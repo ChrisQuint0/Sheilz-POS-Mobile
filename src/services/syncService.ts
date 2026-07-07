@@ -1,6 +1,6 @@
 import { getDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
-import { deductInventoryForOrder } from './inventoryService';
+import { deductInventoryForOrder, voidInventoryForOrder } from './inventoryService';
 
 const BATCH_SIZE = 25;
 
@@ -231,6 +231,16 @@ async function doRunSync(): Promise<RunSyncResult> {
             console.warn(`Inventory deduction failed for order ${o.id}: ${result.error}`);
             // Note: We don't fail the sync if inventory deduction fails—it's a separate operation
             // The order is already synced; the deduction failure should be logged but not block sync
+          }
+        } else if (o.status === 'Void (Consumed)') {
+          // Void (Consumed) means the order was prepared and then wasted, so the
+          // ingredients were physically consumed — stock must still be deducted.
+          // "Void (Not Made)" is intentionally skipped: nothing was used.
+          const result = await voidInventoryForOrder(o.id);
+          if (!result.success) {
+            console.warn(
+              `Inventory deduction failed for voided (consumed) order ${o.id}: ${result.error}`,
+            );
           }
         }
       }

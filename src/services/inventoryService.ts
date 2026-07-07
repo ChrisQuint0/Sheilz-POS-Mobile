@@ -47,3 +47,25 @@ export async function deductInventoryForOrder(orderId: string): Promise<{
     };
   }
 }
+
+/**
+ * Deducts inventory for an order that was voided with reason "Void (Consumed)".
+ *
+ * The same `deduct_inventory_for_order` RPC is used as for Completed orders,
+ * because in both cases the ingredients were physically consumed (preparation
+ * already happened). The order's `status` column on the remote stays at
+ * 'Void (Consumed)' — only the inventory side-effect is added.
+ *
+ * "Void (Not Made)" MUST NOT call this — the food was never prepared, so no
+ * stock was used.
+ *
+ * @param orderId - The UUID of the voided order
+ * @returns Object with success flag and deduction count
+ */
+export async function voidInventoryForOrder(orderId: string): Promise<{
+  success: boolean;
+  deduction_count?: number;
+  error?: string;
+}> {
+  return deductInventoryForOrder(orderId);
+}
