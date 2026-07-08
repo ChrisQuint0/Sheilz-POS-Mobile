@@ -30,6 +30,9 @@ yarn-error.*
 .DS_Store
 *.pem
 
+# build files
+.env.production
+
 # local env files
 .env*.local
 
@@ -46,3 +49,4 @@ handoff.md
 db_strucutre.md
 plan.md
 supabase_functions_triggers.md
+fixing_handoff.md
