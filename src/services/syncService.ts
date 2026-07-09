@@ -81,11 +81,13 @@ async function doRunSync(): Promise<RunSyncResult> {
 
       for (const order of remoteOrders) {
         try {
-          // Check if order exists
+          // Check if order exists — keyed on `id` (globally unique UUID),
+          // not `order_id` (a human-readable, per-device sequential number
+          // that can collide across devices/builds syncing the same day).
           const { data: existingOrder, error: checkError } = await supabase
             .from('orders')
             .select('id')
-            .eq('order_id', order.order_id)
+            .eq('id', order.id)
             .maybeSingle();
 
           if (checkError) {
@@ -98,7 +100,7 @@ async function doRunSync(): Promise<RunSyncResult> {
             const remoteOrderId = existingOrder.id;
             localToRemoteOrderId.set(order.id, remoteOrderId);
 
-            const { error: updateError } = await supabase
+            const { data: updatedOrder, error: updateError } = await supabase
               .from('orders')
               .update({
                 customer_name: order.customer_name,
@@ -111,11 +113,20 @@ async function doRunSync(): Promise<RunSyncResult> {
                 last_modified_at: order.last_modified_at,
                 synced_at: order.synced_at,
               })
-              .eq('order_id', order.order_id);
+              .eq('id', order.id)
+              .select();
 
             if (updateError) {
               console.error(`Failed to update order ${order.order_id}:`, updateError);
               throw updateError;
+            }
+            // A blocked-by-RLS UPDATE returns no error and 0 rows — without
+            // this check it looks identical to a successful update (see
+            // 2026-07-09 session log). Treat 0 rows matched as a failure.
+            if (!updatedOrder || updatedOrder.length === 0) {
+              throw new Error(
+                `Update matched 0 rows for order ${order.order_id} — likely blocked by RLS`
+              );
             }
             console.log(`Updated existing order: ${order.order_id}`);
           } else {
@@ -185,14 +196,20 @@ async function doRunSync(): Promise<RunSyncResult> {
 
               if (existingItem) {
                 // Update existing item
-                const { error: updateError } = await supabase
+                const { data: updatedItem, error: updateError } = await supabase
                   .from('order_items')
                   .update(item)
-                  .eq('id', item.id);
+                  .eq('id', item.id)
+                  .select();
 
                 if (updateError) {
                   console.error(`Failed to update item ${item.id}:`, updateError);
                   throw updateError;
+                }
+                if (!updatedItem || updatedItem.length === 0) {
+                  throw new Error(
+                    `Update matched 0 rows for item ${item.id} — likely blocked by RLS`
+                  );
                 }
               } else {
                 // Insert new item
