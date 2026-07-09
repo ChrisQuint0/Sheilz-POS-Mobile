@@ -248,8 +248,32 @@ export const usePOSStore = create<POSState>((set, get) => ({
           return;
         }
       }
-      // No orders today yet — leave the defaults (orderSequence: 1,
-      // lastOrderDate: today, both already initialized at store create).
+      // Local SQLite has nothing for today — this is the normal case on a
+      // brand-new day, but it's indistinguishable here from a fresh
+      // install/reinstall wiping local state while remote orders for today
+      // already exist (see 2026-07-09 handoff entry). Check Supabase before
+      // falling back to 1, so a reinstalled device doesn't regenerate an
+      // order_number another device already synced today.
+      const { data: remoteRow, error } = await supabase
+        .from('orders')
+        .select('order_id')
+        .like('order_id', `${prefix}%`)
+        .order('order_id', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('initOrderSequence remote fallback failed:', error);
+        return; // fall through to defaults (orderSequence: 1)
+      }
+      if (remoteRow?.order_id) {
+        const lastSeq = parseInt(remoteRow.order_id.slice(prefix.length), 10);
+        if (Number.isFinite(lastSeq) && lastSeq > 0) {
+          set({ orderSequence: lastSeq + 1, lastOrderDate: today });
+        }
+      }
+      // Neither local nor remote has an order for today — leave the
+      // defaults (orderSequence: 1, lastOrderDate: today).
     } catch (err) {
       // If the lookup fails, fall through to defaults rather than
       // blocking app boot. The first generated number may still
