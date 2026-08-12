@@ -12,6 +12,11 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.cream,
   },
+  letter: {
+  fontSize: TYPOGRAPHY.sizes.xxxl,
+  fontFamily: "PlusJakartaSans_600SemiBold",
+  color: COLORS.espresso,
+},
 
   // Header
   header: {
@@ -29,7 +34,6 @@ export const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.lg,
     fontWeight: TYPOGRAPHY.weights.bold,
     color: COLORS.espresso,
-    fontFamily: Platform.select({ ios: "Georgia", android: "serif" }),
   },
   headerRight: {
     flexDirection: "row",

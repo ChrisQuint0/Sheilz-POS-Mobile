@@ -72,6 +72,11 @@ export default function TicketsScreen() {
 }
 
 const styles = StyleSheet.create({
+  letter: {
+    fontSize: TYPOGRAPHY.sizes.xxxl,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: COLORS.espresso,
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,

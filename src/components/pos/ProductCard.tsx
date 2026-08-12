@@ -1,5 +1,6 @@
 import React from "react";
 import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
+import { Image as ExpoImage } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { MenuItem, usePOSStore } from "../../store/usePOSStore";
 import {
@@ -24,6 +25,12 @@ export default function ProductCard({ item, onSelect }: ProductCardProps) {
   return (
     <TouchableOpacity style={styles.card} onPress={() => onSelect(item)}>
       <View style={styles.imageContainer}>
+        <ExpoImage
+          source={item.image ? { uri: item.image } : undefined}
+          style={styles.cardImage}
+          cachePolicy="disk"
+          transition={150}
+        />
         {quantityInCart > 0 && (
           <View style={styles.badge}>
             <AppText style={styles.badgeText}>{quantityInCart}</AppText>

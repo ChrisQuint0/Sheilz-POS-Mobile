@@ -12,7 +12,7 @@ import { supabase } from "../../lib/supabase";
 import { resolveProfile } from "../../lib/auth";
 import { COLORS, TYPOGRAPHY } from "../../constants/theme";
 const { width } = Dimensions.get("window");
-const APP_NAME = "SHIELZ POS";
+const APP_NAME = "Sheilz POS";
 export default function SplashScreen() {
   const { setHasFinishedSplash, login } = usePOSStore();
 
@@ -97,7 +97,7 @@ export default function SplashScreen() {
   return (
     <Animated.View style={[styles.container, { opacity: fadeOut }]}>
       <Animated.Image
-        source={require("../../../assets/shielz_pos_logo.png")}
+        source={require("../../../assets/sheilz_pos_official_logo.png")}
         style={[
           styles.logo,
           {
@@ -157,8 +157,7 @@ const styles = StyleSheet.create({
   },
   letter: {
     fontSize: TYPOGRAPHY.sizes.xxxl,
-    fontWeight: "bold",
-    fontFamily: Platform.select({ ios: "Georgia", android: "serif" }),
+    fontFamily: "PlusJakartaSans_600SemiBold",
     color: COLORS.espresso,
   },
 });
