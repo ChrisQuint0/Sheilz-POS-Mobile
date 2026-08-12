@@ -257,6 +257,11 @@ export default function POSScreen() {
 }
 
 const styles = StyleSheet.create({
+  letter: {
+    fontSize: TYPOGRAPHY.sizes.xxxl,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: COLORS.espresso,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.surface,

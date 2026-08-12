@@ -57,7 +57,7 @@ export default function CustomDrawer(props: DrawerContentComponentProps) {
         {/* Brand Logo Section */}
         <View style={styles.logoSection}>
           <Image
-            source={require("../../../assets/shielz_pos_logo.png")}
+            source={require("../../../assets/sheilz_pos_official_logo.png")}
             style={styles.logoImage}
             resizeMode="contain"
           />

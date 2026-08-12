@@ -68,16 +68,16 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.card}>
         <View style={styles.header}>
           <Image
-            source={require("../../../assets/shielz_pos_logo.png")}
+            source={require("../../../assets/sheilz_pos_official_logo.png")}
             style={styles.logo}
             resizeMode="contain"
           />
-          <AppText style={styles.title}>SHIELZ POS</AppText>
+          <AppText style={styles.title}>Sheilz POS</AppText>
           <AppText style={styles.subtitle}>
             Sign in to access the terminal
           </AppText>
@@ -258,5 +258,10 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     flexShrink: 1,
     textAlign: "center",
+  },
+  letter: {
+    fontSize: TYPOGRAPHY.sizes.xxxl,
+    fontFamily: "PlusJakartaSans_600SemiBold",
+    color: COLORS.espresso,
   },
 });

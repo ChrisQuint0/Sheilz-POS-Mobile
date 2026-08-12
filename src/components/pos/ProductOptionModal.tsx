@@ -8,6 +8,7 @@ import {
   Platform,
   Animated,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
   MenuItem,
@@ -57,6 +58,7 @@ export default function ProductOptionModal({
   onClose,
 }: ProductOptionModalProps) {
   const { addToCart, showToast } = usePOSStore();
+  const insets = useSafeAreaInsets();
   const [selectedSizeId, setSelectedSizeId] = useState<string | null>(null);
   const [selectedTempId, setSelectedTempId] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -173,7 +175,16 @@ export default function ProductOptionModal({
       <View style={styles.overlay}>
         <Pressable style={styles.overlayPressable} onPress={handleClose} />
         <Animated.View
-          style={[styles.sheet, { transform: [{ translateY: slideAnim }] }]}
+          style={[
+            styles.sheet,
+            {
+              paddingBottom:
+                Platform.OS === "ios"
+                  ? 40
+                  : Math.max(insets.bottom, SPACING.lg),
+            },
+            { transform: [{ translateY: slideAnim }] },
+          ]}
         >
           <View style={styles.header}>
             <AppText style={styles.title}>{item.name}</AppText>
@@ -305,7 +316,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: BORDER_RADIUS.xl,
     borderTopRightRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
-    paddingBottom: Platform.OS === "ios" ? 40 : SPACING.lg,
   },
   header: {
     flexDirection: "row",
