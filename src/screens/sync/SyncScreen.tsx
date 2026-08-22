@@ -29,6 +29,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { DrawerNavigationProp } from "@react-navigation/drawer";
 import { styles } from "./SyncScreen.styles";
+import { getLastCustomerSyncAt } from "../../services/customerRepository";
+import { syncCustomersFromSupabase } from "../../services/customerSyncService";
 // ─── Status Helpers ─────────────────────────────────────────────
 const STATUS_CONFIG: Record<
   SyncStatus,
@@ -270,6 +272,8 @@ export default function SyncScreen() {
   // how POSScreen.tsx reads the catalog repo directly). Refreshed on focus
   // rather than mount-only, since this is a Drawer screen and drawer screens
   // typically stay mounted between visits.
+  const [customerSyncedAt, setCustomerSyncedAt] = useState<string | null>(null);
+  const [isSyncingCustomers, setIsSyncingCustomers] = useState(false);
   const [catalogSyncedAt, setCatalogSyncedAt] = useState<string | null>(null);
 
   useFocusEffect(
@@ -278,7 +282,10 @@ export default function SyncScreen() {
       getLastCatalogSyncAt().then((value) => {
         if (isMounted) setCatalogSyncedAt(value);
       });
-      useSyncStore.getState().hydrateStats(); // ← added
+      getLastCustomerSyncAt().then((value) => {
+        if (isMounted) setCustomerSyncedAt(value);
+      });
+      useSyncStore.getState().hydrateStats();
       return () => {
         isMounted = false;
       };
@@ -326,6 +333,23 @@ export default function SyncScreen() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const handleSyncCustomers = async () => {
+    if (isSyncingCustomers) return;
+    setIsSyncingCustomers(true);
+    const result = await syncCustomersFromSupabase();
+    setIsSyncingCustomers(false);
+    if (result.success) {
+      const value = await getLastCustomerSyncAt();
+      setCustomerSyncedAt(value);
+      Alert.alert("Sync Complete", "Customer data has been updated.");
+    } else {
+      Alert.alert(
+        "Sync Failed",
+        result.error ?? "Could not sync customer data.",
+      );
+    }
   };
 
   const handleSyncNow = async () => {
@@ -617,6 +641,46 @@ export default function SyncScreen() {
                   ? `Last updated ${formatTimestamp(catalogSyncedAt)}`
                   : "Not yet synced"}
               </AppText>
+              <View style={styles.settingDivider} />
+
+              <View style={styles.settingRow}>
+                <View
+                  style={[
+                    styles.settingIconWrap,
+                    { backgroundColor: COLORS.roseBlushSoft },
+                  ]}
+                >
+                  <Ionicons
+                    name="people-outline"
+                    size={18}
+                    color={COLORS.primary}
+                  />
+                </View>
+                <View style={styles.settingInfo}>
+                  <AppText style={styles.settingLabel}>Customer Data</AppText>
+                  <AppText style={styles.settingSub}>
+                    {customerSyncedAt
+                      ? `Last updated ${formatTimestamp(customerSyncedAt)}`
+                      : "Not yet synced"}
+                  </AppText>
+                </View>
+                <TouchableOpacity
+                  style={styles.syncSmallBtn}
+                  onPress={handleSyncCustomers}
+                  disabled={isSyncingCustomers}
+                  activeOpacity={0.8}
+                >
+                  {isSyncingCustomers ? (
+                    <ActivityIndicator size="small" color={COLORS.primary} />
+                  ) : (
+                    <Ionicons
+                      name="cloud-download-outline"
+                      size={16}
+                      color={COLORS.primary}
+                    />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>

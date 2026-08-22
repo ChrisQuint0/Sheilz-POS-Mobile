@@ -1,6 +1,7 @@
 import { getDB } from '../lib/db';
 import { supabase } from '../lib/supabase';
 import { deductInventoryForOrder, voidInventoryForOrder } from './inventoryService';
+import { syncCustomersFromSupabase } from './customerSyncService';
 
 const BATCH_SIZE = 25;
 
@@ -70,6 +71,7 @@ async function doRunSync(): Promise<RunSyncResult> {
         last_modified_at: now,
         created_at: o.created_at,
         synced_at: now,
+        customer_id: o.customer_id ?? null,
       }));
 
       // Map of local order ID to remote order ID for item syncing
@@ -112,6 +114,7 @@ async function doRunSync(): Promise<RunSyncResult> {
                 last_modified_by: order.last_modified_by,
                 last_modified_at: order.last_modified_at,
                 synced_at: order.synced_at,
+                customer_id: order.customer_id,
               })
               .eq('id', order.id)
               .select();
@@ -260,6 +263,19 @@ async function doRunSync(): Promise<RunSyncResult> {
             );
           }
         }
+      }
+
+      // After a successful batch, refresh the local customer cache so any
+      // loyalty stamps awarded by `fn_earn_loyalty_stamps` (server-side
+      // trigger on orders) are reflected on the next customer scan without
+      // requiring a manual visit to SyncScreen. Logged but non-fatal —
+      // orders are already marked 'synced' and the next manual customer
+      // sync (from SyncScreen focus) will catch up.
+      const customerRefresh = await syncCustomersFromSupabase();
+      if (!customerRefresh.success) {
+        console.warn(
+          `Customer cache refresh failed after batch sync: ${customerRefresh.error}`,
+        );
       }
 
       synced += batch.length;

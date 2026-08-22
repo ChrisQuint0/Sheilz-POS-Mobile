@@ -28,6 +28,10 @@ export const COLORS = {
 
   // Semantic
   primary: '#C2456A', // v2 primary
+  success: '#4F9A5C', // alias for sage
+  warning: '#E08A4F', // alias for caramel
+  info: '#4A90E2', // info blue
+  danger: '#D6485E', // alias for brick
 
   // Defaults for text
   text: '#3A2B27', // ink

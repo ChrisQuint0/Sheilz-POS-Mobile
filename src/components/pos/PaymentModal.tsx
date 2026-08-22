@@ -60,7 +60,7 @@ export default function PaymentModal({
 
   const handleConfirm = () => {
     if (selectedMethod) {
-      onConfirm(selectedMethod.name, customerName.trim());
+      onConfirm(selectedMethod.name, customerName.trim() || undefined);
       setSelectedMethod(null);
       setCustomerName("");
     }

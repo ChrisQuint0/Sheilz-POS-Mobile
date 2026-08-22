@@ -25,26 +25,37 @@ import { useSyncStore, SyncStatus } from "../store/useSyncStore";
 // Sync Screen
 import SyncScreen from "../screens/sync/SyncScreen";
 
+//CRM Screen
+import CustomerManagementScreen from "../screens/customers/CustomerManagementScreen";
+
 const Drawer = createDrawerNavigator();
 const Stack = createNativeStackNavigator();
 
 function MainDrawerNavigator() {
-  const { status, pendingTransactions, pendingInventory, failedRecords } = useSyncStore();
+  const { status, pendingTransactions, pendingInventory, failedRecords } =
+    useSyncStore();
   const totalPending = pendingTransactions + pendingInventory + failedRecords;
 
   const getSyncIcon = (currentStatus: SyncStatus, defaultColor: string) => {
     switch (currentStatus) {
-      case 'Synced': return { name: 'checkmark-circle', color: COLORS.success };
-      case 'Pending Sync': return { name: 'time', color: COLORS.warning };
-      case 'Syncing': return { name: 'sync', color: COLORS.info };
-      case 'Sync Failed': return { name: 'warning', color: COLORS.danger };
-      case 'Offline': return { name: 'cloud-offline', color: COLORS.textLight };
-      default: return { name: 'cloud', color: defaultColor };
+      case "Synced":
+        return { name: "checkmark-circle", color: COLORS.success };
+      case "Pending Sync":
+        return { name: "time", color: COLORS.warning };
+      case "Syncing":
+        return { name: "sync", color: COLORS.info };
+      case "Sync Failed":
+        return { name: "warning", color: COLORS.danger };
+      case "Offline":
+        return { name: "cloud-offline", color: COLORS.textLight };
+      default:
+        return { name: "cloud", color: defaultColor };
     }
   };
 
   const syncIconDetails = getSyncIcon(status, COLORS.textLight);
-  const syncDrawerLabel = totalPending > 0 ? `Data Sync (${totalPending})` : 'Data Sync';
+  const syncDrawerLabel =
+    totalPending > 0 ? `Data Sync (${totalPending})` : "Data Sync";
 
   return (
     <Drawer.Navigator
@@ -56,7 +67,7 @@ function MainDrawerNavigator() {
         drawerActiveBackgroundColor: COLORS.stone100,
         drawerStyle: {
           backgroundColor: COLORS.surface,
-          width: '80%', // Standard width
+          width: "80%", // Standard width
         },
         drawerLabelStyle: {
           fontWeight: TYPOGRAPHY.weights.semibold,
@@ -65,55 +76,97 @@ function MainDrawerNavigator() {
         drawerItemStyle: {
           marginVertical: 8,
           borderRadius: 8,
-        }
+        },
       }}
     >
       {/* We hide the default header because we built a custom one inside POSScreen */}
       <Drawer.Screen
         name="Orders"
         component={POSScreen}
-        options={{ 
+        options={{
           headerShown: false,
-          drawerIcon: ({ color, size }) => <Ionicons name="grid-outline" size={size} color={color} />
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="grid-outline" size={size} color={color} />
+          ),
         }}
       />
-      <Drawer.Screen 
-        name="Tickets" 
-        component={TicketsScreen} 
+      <Drawer.Screen
+        name="Tickets"
+        component={TicketsScreen}
         options={{
           headerTitle: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="receipt-outline" size={20} color={COLORS.espresso} />
-              <Text style={{ 
-                fontSize: 18, 
-                fontWeight: 'bold', 
-                color: COLORS.espresso, 
-                fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }) 
-              }}>Order Tickets</Text>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <Ionicons
+                name="receipt-outline"
+                size={20}
+                color={COLORS.espresso}
+              />
+              <Text
+                style={{
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  color: COLORS.espresso,
+                  fontFamily: Platform.select({
+                    ios: "Georgia",
+                    android: "serif",
+                  }),
+                }}
+              >
+                Order Tickets
+              </Text>
             </View>
           ),
-          drawerIcon: ({ color, size }) => <Ionicons name="receipt-outline" size={size} color={color} />
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="receipt-outline" size={size} color={color} />
+          ),
         }}
       />
-      <Drawer.Screen 
-        name="Data Sync" 
-        component={SyncScreen} 
+      <Drawer.Screen
+        name="Customer Management"
+        component={CustomerManagementScreen}
+        options={{
+          headerShown: false,
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="people-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="Data Sync"
+        component={SyncScreen}
         options={{
           headerShown: false,
           drawerLabel: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flex: 1 }}>
-              <Text style={{ 
-                fontWeight: TYPOGRAPHY.weights.semibold,
-                fontSize: TYPOGRAPHY.sizes.sm,
-                color: COLORS.espresso 
-              }}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                flex: 1,
+              }}
+            >
+              <Text
+                style={{
+                  fontWeight: TYPOGRAPHY.weights.semibold,
+                  fontSize: TYPOGRAPHY.sizes.sm,
+                  color: COLORS.espresso,
+                }}
+              >
                 {syncDrawerLabel}
               </Text>
               {/* Quick Status Icon beside label */}
-              <Ionicons name={syncIconDetails.name as any} size={16} color={syncIconDetails.color} />
+              <Ionicons
+                name={syncIconDetails.name as any}
+                size={16}
+                color={syncIconDetails.color}
+              />
             </View>
           ),
-          drawerIcon: ({ color, size }) => <Ionicons name="sync" size={size} color={color} />
+          drawerIcon: ({ color, size }) => (
+            <Ionicons name="sync" size={size} color={color} />
+          ),
         }}
       />
     </Drawer.Navigator>
@@ -128,7 +181,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: "fade" }}>
       {!isAuthenticated ? (
         <Stack.Screen name="Login" component={LoginScreen} />
       ) : (

@@ -8,7 +8,8 @@ export async function createOrder(
   paymentMethod: string,
   cashierId: string | null,
   cashierName: string,
-  customerName?: string
+  customerName?: string,
+  customerId?: number | null
 ): Promise<Order> {
   const db = await getDB();
   const id = Crypto.randomUUID();
@@ -18,9 +19,9 @@ export async function createOrder(
 
   await db.withExclusiveTransactionAsync(async (txn) => {
     await txn.runAsync(
-      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-      [id, orderNumber, customerName ?? 'Walk-In', status, totalAmount, paymentMethod, cashierId, cashierName, timestamp]
+      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status, customer_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+      [id, orderNumber, customerName ?? 'Walk-In', status, totalAmount, paymentMethod, cashierId, cashierName, timestamp, customerId ?? null]
     );
 
     for (const c of cart) {

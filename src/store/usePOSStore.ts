@@ -3,6 +3,14 @@ import { supabase } from '../lib/supabase';
 import { getDB } from '../lib/db';
 import { createOrder, updateOrderStatus as updateOrderStatusInDb, listOrders } from '../services/orderRepository';
 
+
+export interface ActiveCustomer {
+  id: number;
+  card_number: string;
+  first_name: string | null;
+  last_name: string | null;
+}
+
 export interface ProductSizeOption {
   id: string;
   name: string;
@@ -55,6 +63,11 @@ export interface CartItem {
   options?: CartItemOptions;
   unitPrice: number;
   quantity: number;
+  // True when this line item was added via the loyalty "Redeem Free 12oz
+  // Drink" flow. Drives the FREE badge in CartSummary, the "Free (Loyalty)"
+  // label in ReceiptModal, and the loyalty_log insert in syncService.
+  // Forced to unitPrice=0 in the cart — the customer doesn't pay for it.
+  isRedemption?: boolean;
 }
 
 export type OrderStatus = 'Current' | 'Completed' | 'Void (Not Made)' | 'Void (Consumed)';
@@ -85,6 +98,36 @@ interface POSState {
   userRole: string | null;
   login: (profile: AuthProfile) => void;
   logout: () => void;
+  
+  activeCustomer: ActiveCustomer | null;
+  setActiveCustomer: (customer: ActiveCustomer) => void;
+  clearActiveCustomer: () => void;
+
+  // Loyalty redemption mode. When set, the POS is currently configured
+  // for a "free 12oz drink" redemption: ProductOptionModal restricts size
+  // selection to `restrictedSizeId` (and surfaces the FREE badge via the
+  // isRedemption flag on the CartItem). Set by the customer's "Redeem Free
+  // 12oz Drink" action in the scan drawer; cleared on clearCart or after a
+  // successful placeOrder.
+  redemptionMode: {
+    restrictedSizeId: string;
+    restrictedSizeName: string;
+    customerId: number;
+  } | null;
+  enterRedemptionMode: (params: {
+    restrictedSizeId: string;
+    restrictedSizeName: string;
+    customerId: number;
+  }) => void;
+  exitRedemptionMode: () => void;
+  addRedemptionToCart: (
+    item: MenuItem,
+    variantId: string,
+    size: string,
+    temp: string,
+    pointsRequired: number,
+  ) => void;
+
 
   // Navigation & Filtering
   activeCategory: string;
@@ -105,6 +148,7 @@ interface POSState {
   removeFromCart: (cartItemId: string) => void;
   decrementCartItem: (cartItemId: string) => void;
   clearCart: () => void;
+  
   
   // Order Generation
   orderSequence: number;
@@ -164,10 +208,20 @@ export const usePOSStore = create<POSState>((set, get) => ({
   toastMessage: null,
   showToast: (message) => set({ toastMessage: message }),
   hideToast: () => set({ toastMessage: null }),
+  
+  activeCustomer: null,
+  setActiveCustomer: (customer) => set({ activeCustomer: customer }),
+  clearActiveCustomer: () => set({ activeCustomer: null }),
+
+  redemptionMode: null,
+  enterRedemptionMode: (params) => set({ redemptionMode: params }),
+  exitRedemptionMode: () => set({ redemptionMode: null }),
 
   cart: [],
   addToCart: (item, options, unitPrice, quantity = 1) => set((state) => {
-    // Generate unique ID based on options
+    // Generate unique ID based on options. Redemption items get a distinct
+    // suffix so a paid and a free line of the same product (same size/temp)
+    // don't collapse into one cart row.
     const optionStr = options ? `${options.size || ''}-${options.temp || ''}-${options.addon ? 'addon' : ''}` : 'no-options';
     const cartItemId = `${item.id}-${optionStr}`;
     const price = unitPrice !== undefined ? unitPrice : item.price;
@@ -181,6 +235,32 @@ export const usePOSStore = create<POSState>((set, get) => ({
       };
     }
     return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity }] };
+  }),
+
+  addRedemptionToCart: (item, _variantId, size, temp, _pointsRequired) => set((state) => {
+    // Free-drink redemption: always ₱0, qty 1, flagged so cart/receipt/
+    // sync know it's a loyalty redemption (not a regular zero-priced
+    // item). Uses a 'redeem' suffix in cartItemId so it can't collide
+    // with a same-product paid line in the cart.
+    const cartItemId = `${item.id}-${size}-${temp}-redeem`;
+    // Don't double-redeem — if there's already a redemption line of this
+    // exact product+config in the cart, just no-op (UI button stays
+    // disabled while one is present anyway).
+    const existing = state.cart.find((c) => c.cartItemId === cartItemId);
+    if (existing) return state;
+    return {
+      cart: [
+        ...state.cart,
+        {
+          cartItemId,
+          item,
+          options: { size, temp },
+          unitPrice: 0,
+          quantity: 1,
+          isRedemption: true,
+        },
+      ],
+    };
   }),
 
   removeFromCart: (cartItemId) => set((state) => ({
@@ -202,7 +282,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
     };
   }),
 
-  clearCart: () => set({ cart: [] }),
+  clearCart: () => set({ cart: [], activeCustomer: null, redemptionMode: null }),
 
   orderSequence: 1,
   lastOrderDate: getTodayString(),
@@ -292,19 +372,27 @@ export const usePOSStore = create<POSState>((set, get) => ({
     const orders = await listOrders();
     set({ orders });
   },
-  placeOrder: async (paymentMethod, orderNumber, customerName) => {
+    placeOrder: async (paymentMethod, orderNumber, customerName) => {
     const state = get();
+    // Pull the per-line isRedemption flag into a flat list for createOrder.
+    // createOrder will flip the order's is_redemption to 1 if any line is a
+    // redemption, so syncService knows to write the matching loyalty_log row.
+    const hasRedemptionLine = state.cart.some((c) => c.isRedemption === true);
     const newOrder = await createOrder(
       state.cart,
       orderNumber,
       paymentMethod,
       state.userId,
       state.cashierName,
-      customerName
+      customerName,
+      state.activeCustomer?.id ?? null,
+      hasRedemptionLine,
     );
     set((s) => ({
       orders: [newOrder, ...s.orders],
       cart: [],
+      activeCustomer: null,
+      redemptionMode: null,
     }));
   },
   updateOrderStatus: async (orderId, status) => {
