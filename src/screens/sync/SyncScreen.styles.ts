@@ -330,4 +330,12 @@ export const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
   },
+  syncSmallBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.roseBlushSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

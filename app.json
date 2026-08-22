@@ -44,6 +44,12 @@
       "expo-sqlite",
       "expo-background-task",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Sheilz POS to access your camera to scan customer loyalty QR codes."
+        }
+      ],
+      [
         "expo-media-library",
         {
           "photosPermission": "Allow Sheilz POS to access your photos.",
