@@ -46,7 +46,7 @@ yarn-error.*
 #development related md files
 pos_mobile_project_structure.md
 handoff.md
-db_strucutre.md
 plan.md
 supabase_functions_triggers.md
 fixing_handoff.md
+db_struct.md

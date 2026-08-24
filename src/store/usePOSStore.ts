@@ -378,13 +378,26 @@ export const usePOSStore = create<POSState>((set, get) => ({
     // createOrder will flip the order's is_redemption to 1 if any line is a
     // redemption, so syncService knows to write the matching loyalty_log row.
     const hasRedemptionLine = state.cart.some((c) => c.isRedemption === true);
+
+    // An attached customer (scanned via Customer Management) always takes
+    // precedence over whatever the cashier manually typed into
+    // PaymentModal's optional name field. "First Last" order, per Ipei.
+    // If the attached customer has neither name on file, we fall back to
+    // undefined (-> 'Walk-In' via createOrder's default), NOT to the manual
+    // name — an attached customer always wins even if their name is blank.
+    const resolvedCustomerName = state.activeCustomer
+      ? [state.activeCustomer.first_name, state.activeCustomer.last_name]
+          .filter(Boolean)
+          .join(' ') || undefined
+      : customerName;
+
     const newOrder = await createOrder(
       state.cart,
       orderNumber,
       paymentMethod,
       state.userId,
       state.cashierName,
-      customerName,
+      resolvedCustomerName,
       state.activeCustomer?.id ?? null,
       hasRedemptionLine,
     );
