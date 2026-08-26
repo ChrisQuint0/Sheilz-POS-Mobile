@@ -24,7 +24,9 @@ import { DrawerNavigationProp } from "@react-navigation/drawer";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AppText from "../../components/ui/AppText";
 import { usePOSStore } from "../../store/usePOSStore";
+import { useSyncStore } from "../../store/useSyncStore";
 import { useCustomerStore } from "../../store/useCustomerStore";
+import { syncCustomersFromSupabase } from "../../services/customerSyncService";
 import {
   COLORS,
   TYPOGRAPHY,
@@ -170,8 +172,24 @@ export default function CustomerManagementScreen() {
     }, []),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh the customer cache automatically on focus, so the cashier
+      // doesn't need to visit SyncScreen's manual "Customer Data" sync
+      // button first. Offline: no-op — whatever's cached (however stale)
+      // is shown, same as before this change. SyncScreen itself is
+      // untouched and still works as the manual fallback.
+      if (useSyncStore.getState().isNetworkConnected) {
+        syncCustomersFromSupabase().catch((err) => {
+          console.warn("Background customer sync on screen focus failed:", err);
+        });
+      }
+    }, []),
+  );
+
   const setActiveCustomer = usePOSStore((s) => s.setActiveCustomer);
   const showToast = usePOSStore((s) => s.showToast);
+  const activeReward = usePOSStore((s) => s.activeReward);
 
   const {
     isLoading,
@@ -213,6 +231,7 @@ export default function CustomerManagementScreen() {
       card_number: foundCustomer.card_number,
       first_name: foundCustomer.first_name,
       last_name: foundCustomer.last_name,
+      loyalty_progress: foundCustomer.loyalty_progress,
     });
     showToast(`${displayName(foundCustomer)} attached to current order`);
     handleCloseDrawer();
@@ -384,7 +403,8 @@ export default function CustomerManagementScreen() {
                           pointsRequired - foundCustomer.loyalty_progress,
                           0,
                         )}{" "}
-                        more purchases until a free drink
+                        more purchases until{" "}
+                        {activeReward?.reward_type ?? "the next reward"}
                       </AppText>
                     </View>
                   )}

@@ -7,6 +7,42 @@ type Migration = {
 
 const MIGRATIONS: Migration[] = [
     {
+    version: 7,
+    // Redemption now finalizes at order COMPLETION, not at charge time
+    // (see 2026-08-23 bugfix — syncing a 'Current' order to Supabase
+    // violates orders_status_check remotely; only Completed/Void statuses
+    // are ever pushed). Since completion can happen a while after charge,
+    // these columns freeze which reward + point cost applied at the
+    // moment of redemption, so a later change to the active reward can't
+    // retroactively affect an order already in flight. Local-only — not
+    // part of the remote orders payload in syncService.ts.
+    sql: `
+      ALTER TABLE orders ADD COLUMN redeemed_reward_id INTEGER;
+      ALTER TABLE orders ADD COLUMN redeemed_points_required INTEGER;
+    `,
+  },
+    {
+    version: 6,
+    // Multi-reward-type redemption support (2026-08-23). loyalty_program
+    // gains the fields the server table already has (reward_type, quantity,
+    // discount_amount) — previously only points_required was synced/cached.
+    // order_items gains per-line redemption tracking: is_redemption marks a
+    // line as free (Free Coffee/Free Pastry reward), redeemed_discount holds
+    // the flat peso amount taken off for a Discount-type redemption (0 for
+    // free-item redemptions, since unit_price already reflects 0 there).
+    // NOTE: this is separate from v5's orders.is_redemption, which flags the
+    // whole order and predates per-line tracking — left untouched, still
+    // written by createOrder for whole-order filtering/reporting.
+    sql: `
+      ALTER TABLE loyalty_program ADD COLUMN reward_type TEXT;
+      ALTER TABLE loyalty_program ADD COLUMN quantity INTEGER;
+      ALTER TABLE loyalty_program ADD COLUMN discount_amount REAL;
+
+      ALTER TABLE order_items ADD COLUMN is_redemption INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE order_items ADD COLUMN redeemed_discount REAL NOT NULL DEFAULT 0;
+    `,
+  },
+    {
     version: 5,
     // Loyalty redemption support (2026-08-22).
     // `is_redemption` flags orders that contain a free-drink line item
