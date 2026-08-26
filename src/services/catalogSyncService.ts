@@ -18,7 +18,7 @@ export async function syncCatalogFromSupabase(): Promise<SyncResult> {
     supabase
       .from('products')
       .select(
-        `id, name, category_id, image_url,
+        `id, name, category_id, image_url, type,
          product_variants!inner (
            id,
            price,
@@ -70,6 +70,7 @@ export async function syncCatalogFromSupabase(): Promise<SyncResult> {
       name: p.name,
       category_id: p.category_id,
       image_url: p.image_url,
+      type: p.type,
     })),
     variants,
     paymentMethods: paymentMethodsResult.data ?? [],

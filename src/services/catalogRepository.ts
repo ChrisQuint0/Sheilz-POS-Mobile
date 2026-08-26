@@ -5,7 +5,7 @@ export interface CatalogSnapshot {
   categories: { id: string; name: string }[];
   sizes: { id: string; name: string; sort_order: number }[];
   temperatures: { id: string; name: string; sort_order: number }[];
-  products: { id: string; name: string; category_id: string; image_url: string | null }[];
+  products: { id: string; name: string; category_id: string; image_url: string | null; type: string }[];
   variants: {
     id: string;
     product_id: string;
@@ -43,7 +43,7 @@ export async function getProducts(): Promise<MenuItem[]> {
   const db = await getDB();
 
   const productRows = await db.getAllAsync<any>(
-    `SELECT p.id, p.name, p.category_id, p.image_url, c.name as category_name
+    `SELECT p.id, p.name, p.category_id, p.image_url, p.type, c.name as category_name
      FROM products p
      LEFT JOIN product_categories c ON c.id = p.category_id
      ORDER BY p.name`
@@ -79,6 +79,7 @@ export async function getProducts(): Promise<MenuItem[]> {
       name: p.name,
       category: p.category_name ?? '',
       category_id: p.category_id,
+      type: p.type,
       image: p.image_url,
       price: lowestPrice,
       variants,
@@ -117,8 +118,8 @@ export async function replaceCatalog(snapshot: CatalogSnapshot): Promise<void> {
     }
     for (const p of snapshot.products) {
       await txn.runAsync(
-        `INSERT INTO products (id, name, category_id, image_url) VALUES (?, ?, ?, ?)`,
-        [p.id, p.name, p.category_id, p.image_url]
+        `INSERT INTO products (id, name, category_id, image_url, type) VALUES (?, ?, ?, ?, ?)`,
+        [p.id, p.name, p.category_id, p.image_url, p.type]
       );
     }
     for (const v of snapshot.variants) {

@@ -14,7 +14,11 @@ export async function syncCustomersFromSupabase(): Promise<SyncResult> {
       .select(
         'id, email_address, card_number, loyalty_progress, membership_date, card_status, First_name, last_name, redeem_count'
       ),
-    supabase.from('loyalty_program').select('id, points_required').limit(1),
+    supabase
+      .from('loyalty_program')
+      .select('id, points_required, reward_type, quantity, discount_amount')
+      .eq('status', true)
+      .limit(1),
   ]);
 
   if (customersResult.error || loyaltyProgramResult.error) {
@@ -49,6 +53,9 @@ export async function syncCustomersFromSupabase(): Promise<SyncResult> {
       ? {
           id: loyaltyProgramResult.data[0].id,
           points_required: loyaltyProgramResult.data[0].points_required,
+          reward_type: loyaltyProgramResult.data[0].reward_type,
+          quantity: loyaltyProgramResult.data[0].quantity,
+          discount_amount: loyaltyProgramResult.data[0].discount_amount,
         }
       : null,
   };

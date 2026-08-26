@@ -5,9 +5,11 @@ import {
   FlatList,
   TouchableOpacity,
   Platform,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePOSStore, PaymentMethod } from "../../store/usePOSStore";
+import { useSyncStore } from "../../store/useSyncStore";
 import {
   COLORS,
   TYPOGRAPHY,
@@ -17,6 +19,10 @@ import {
 import AppText from "../ui/AppText";
 import PaymentModal from "./PaymentModal";
 import ConfirmModal from "../ui/ConfirmModal";
+import {
+  canRedeemAnotherLine,
+  isLineEligibleForReward,
+} from "../../services/loyaltyService";
 
 interface CartSummaryProps {
   onChargeComplete?: () => void;
@@ -37,7 +43,13 @@ export default function CartSummary({
     clearCart,
     placeOrder,
     generateOrderNumber,
+    activeCustomer,
+    activeReward,
+    hydrateActiveReward,
+    redeemCartLine,
+    undoRedemption,
   } = usePOSStore();
+  const isNetworkConnected = useSyncStore((s) => s.isNetworkConnected);
   const [orderNumber, setOrderNumber] = useState("");
   const [isPaymentModalVisible, setIsPaymentModalVisible] = useState(false);
   const [isClearModalVisible, setIsClearModalVisible] = useState(false);
@@ -50,6 +62,12 @@ export default function CartSummary({
       setOrderNumber(""); // Clear when cart is emptied manually
     }
   }, [cart.length, orderNumber, generateOrderNumber]);
+
+  // The active reward is shop-wide (one row, status = true), not tied to
+  // any particular customer scan — hydrate it once from the local cache.
+  useEffect(() => {
+    hydrateActiveReward();
+  }, [hydrateActiveReward]);
 
   const cartTotal = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
 
@@ -67,6 +85,11 @@ export default function CartSummary({
       await placeOrder(method, orderNumber, customerName);
     } catch (err) {
       console.error("Failed to place order:", err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Failed to place order. Please try again.";
+      Alert.alert("Could not complete order", message);
       return; // don't clear order number or fire onChargeComplete if the write failed
     }
 
@@ -102,60 +125,137 @@ export default function CartSummary({
         contentContainerStyle={{ paddingHorizontal: SPACING.lg }}
         showsVerticalScrollIndicator={true}
         keyExtractor={(item) => item.cartItemId}
-        renderItem={({ item }) => (
-          <View style={styles.cartItem}>
-            <View style={styles.cartItemMain}>
-              <View style={styles.cartItemTitleArea}>
-                <AppText style={styles.cartItemName}>{item.item.name}</AppText>
-                {item.options && (
-                  <AppText style={styles.cartItemOptions}>
-                    {[
-                      item.options.size !== "One Size"
-                        ? item.options.size
-                        : null,
-                      item.options.temp !== "None" ? item.options.temp : null,
-                      item.options.addon ? "Honey" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" • ")}
+        renderItem={({ item }) => {
+          const eligibleForReward =
+            !item.isRedemption &&
+            activeCustomer &&
+            activeReward &&
+            isLineEligibleForReward(item.item, activeReward) &&
+            canRedeemAnotherLine(
+              activeCustomer.loyalty_progress,
+              cart,
+              activeReward,
+            );
+          const canRedeemThisLine = eligibleForReward && isNetworkConnected;
+          const blockedByOffline = eligibleForReward && !isNetworkConnected;
+
+          return (
+            <View style={styles.cartItem}>
+              <View style={styles.cartItemMain}>
+                <View style={styles.cartItemTitleArea}>
+                  <AppText style={styles.cartItemName}>
+                    {item.item.name}
                   </AppText>
-                )}
+                  {item.options && (
+                    <AppText style={styles.cartItemOptions}>
+                      {[
+                        item.options.size !== "One Size"
+                          ? item.options.size
+                          : null,
+                        item.options.temp !== "None" ? item.options.temp : null,
+                        item.options.addon ? "Honey" : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" • ")}
+                    </AppText>
+                  )}
+                  {item.isRedemption && (
+                    <View style={styles.redeemedBadge}>
+                      <Ionicons name="gift" size={12} color={COLORS.primary} />
+                      <AppText style={styles.redeemedBadgeText}>
+                        {item.redeemedDiscount
+                          ? `-₱${item.redeemedDiscount.toFixed(2)} REWARD`
+                          : "FREE • REWARD"}
+                      </AppText>
+                    </View>
+                  )}
+                </View>
+                <AppText style={styles.cartItemPrice}>
+                  ₱{(item.unitPrice * item.quantity).toFixed(2)}
+                </AppText>
               </View>
-              <AppText style={styles.cartItemPrice}>
-                ₱{(item.unitPrice * item.quantity).toFixed(2)}
-              </AppText>
-            </View>
 
-            <View style={styles.cartItemActions}>
-              <TouchableOpacity
-                onPress={() => decrementCartItem(item.cartItemId)}
-                style={styles.actionBtn}
-              >
-                <Ionicons name="remove" size={18} color={COLORS.textLight} />
-              </TouchableOpacity>
-              <AppText style={styles.cartItemQty}>{item.quantity}</AppText>
-              <TouchableOpacity
-                onPress={() =>
-                  addToCart(item.item, item.options, item.unitPrice)
-                }
-                style={styles.actionBtn}
-              >
-                <Ionicons name="add" size={18} color={COLORS.textLight} />
-              </TouchableOpacity>
+              {item.isRedemption ? (
+                // Redeemed lines can only be undone — no quantity change and
+                // no separate delete, since letting the cashier bump a free
+                // line's quantity would silently give away more free items.
+                <TouchableOpacity
+                  onPress={() => undoRedemption(item.cartItemId)}
+                  style={styles.undoRedeemBtn}
+                >
+                  <AppText style={styles.undoRedeemBtnText}>
+                    Undo reward
+                  </AppText>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  {canRedeemThisLine && (
+                    <TouchableOpacity
+                      onPress={() => redeemCartLine(item.cartItemId)}
+                      style={styles.redeemBtn}
+                    >
+                      <Ionicons
+                        name="gift-outline"
+                        size={14}
+                        color={COLORS.primary}
+                      />
+                      <AppText style={styles.redeemBtnText}>
+                        Redeem {activeReward?.reward_type}
+                      </AppText>
+                    </TouchableOpacity>
+                  )}
+                  {blockedByOffline && (
+                    <View style={styles.redeemOfflineNotice}>
+                      <Ionicons
+                        name="cloud-offline-outline"
+                        size={14}
+                        color={COLORS.textLight}
+                      />
+                      <AppText style={styles.redeemOfflineText}>
+                        Connect to the internet to redeem
+                      </AppText>
+                    </View>
+                  )}
 
-              <TouchableOpacity
-                onPress={() => removeFromCart(item.cartItemId)}
-                style={[styles.actionBtn, styles.deleteBtn]}
-              >
-                <Ionicons
-                  name="trash-outline"
-                  size={18}
-                  color={COLORS.roseDeep}
-                />
-              </TouchableOpacity>
+                  <View style={styles.cartItemActions}>
+                    <TouchableOpacity
+                      onPress={() => decrementCartItem(item.cartItemId)}
+                      style={styles.actionBtn}
+                    >
+                      <Ionicons
+                        name="remove"
+                        size={18}
+                        color={COLORS.textLight}
+                      />
+                    </TouchableOpacity>
+                    <AppText style={styles.cartItemQty}>
+                      {item.quantity}
+                    </AppText>
+                    <TouchableOpacity
+                      onPress={() =>
+                        addToCart(item.item, item.options, item.unitPrice)
+                      }
+                      style={styles.actionBtn}
+                    >
+                      <Ionicons name="add" size={18} color={COLORS.textLight} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      onPress={() => removeFromCart(item.cartItemId)}
+                      style={[styles.actionBtn, styles.deleteBtn]}
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={18}
+                        color={COLORS.roseDeep}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
             </View>
-          </View>
-        )}
+          );
+        }}
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="cart-outline" size={64} color={COLORS.stone200} />
@@ -306,6 +406,60 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.md,
     fontWeight: TYPOGRAPHY.weights.bold,
     color: COLORS.roseDeep,
+  },
+  redeemedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+    alignSelf: "flex-start",
+    backgroundColor: COLORS.roseBlushSoft,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  redeemedBadgeText: {
+    fontSize: 10,
+    fontWeight: TYPOGRAPHY.weights.bold,
+    color: COLORS.primary,
+  },
+  redeemBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.sm,
+    marginBottom: SPACING.sm,
+  },
+  redeemBtnText: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    fontWeight: TYPOGRAPHY.weights.semibold,
+    color: COLORS.primary,
+  },
+  redeemOfflineNotice: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    alignSelf: "flex-start",
+    marginBottom: SPACING.sm,
+  },
+  redeemOfflineText: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: COLORS.textLight,
+    fontStyle: "italic",
+  },
+  undoRedeemBtn: {
+    alignSelf: "flex-start",
+    marginBottom: SPACING.sm,
+  },
+  undoRedeemBtnText: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: COLORS.textLight,
+    textDecorationLine: "underline",
   },
   cartItemActions: {
     flexDirection: "row",

@@ -15,6 +15,11 @@ export interface Customer {
 export interface LoyaltyProgram {
   id: number;
   points_required: number;
+  // Only one loyalty_program row is ever active at a time (status = true
+  // server-side) — the shop's single current promotion, not per-customer.
+  reward_type: string; // e.g. 'Free Coffee' | 'Free Pastry' | 'P10 Discount'
+  quantity: number | null; // items awarded — meaningful for Free Coffee/Pastry
+  discount_amount: number | null; // flat peso amount — meaningful for Discount
 }
 
 export interface CustomerSnapshot {
@@ -29,7 +34,7 @@ export interface CustomerSnapshot {
     last_name: string | null;
     redeem_count: number | null;
   }[];
-  loyaltyProgram: LoyaltyProgram | null;
+  loyaltyProgram: LoyaltyProgram | null; // must include reward_type/quantity/discount_amount
 }
 
 export async function getLastCustomerSyncAt(): Promise<string | null> {
@@ -64,7 +69,13 @@ export async function getLoyaltyProgram(): Promise<LoyaltyProgram | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<any>(`SELECT * FROM loyalty_program LIMIT 1`);
   if (!row) return null;
-  return { id: row.id, points_required: row.points_required };
+  return {
+    id: row.id,
+    points_required: row.points_required,
+    reward_type: row.reward_type,
+    quantity: row.quantity,
+    discount_amount: row.discount_amount,
+  };
 }
 
 // "Last visit" is derived from this device's local order history only — no
@@ -108,8 +119,14 @@ export async function replaceCustomers(snapshot: CustomerSnapshot): Promise<void
 
     if (snapshot.loyaltyProgram) {
       await txn.runAsync(
-        `INSERT INTO loyalty_program (id, points_required) VALUES (?, ?)`,
-        [snapshot.loyaltyProgram.id, snapshot.loyaltyProgram.points_required]
+        `INSERT INTO loyalty_program (id, points_required, reward_type, quantity, discount_amount) VALUES (?, ?, ?, ?, ?)`,
+        [
+          snapshot.loyaltyProgram.id,
+          snapshot.loyaltyProgram.points_required,
+          snapshot.loyaltyProgram.reward_type,
+          snapshot.loyaltyProgram.quantity,
+          snapshot.loyaltyProgram.discount_amount,
+        ]
       );
     }
   });
