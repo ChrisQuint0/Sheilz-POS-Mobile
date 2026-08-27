@@ -181,6 +181,21 @@ export default function CustomerManagementScreen() {
     }, []),
   );
 
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh the customer cache automatically on focus, so the cashier
+      // doesn't need to visit SyncScreen's manual "Customer Data" sync
+      // button first. Offline: no-op — whatever's cached (however stale)
+      // is shown, same as before this change. SyncScreen itself is
+      // untouched and still works as the manual fallback.
+      if (useSyncStore.getState().isNetworkConnected) {
+        syncCustomersFromSupabase().catch((err) => {
+          console.warn("Background customer sync on screen focus failed:", err);
+        });
+      }
+    }, []),
+  );
+
   const setActiveCustomer = usePOSStore((s) => s.setActiveCustomer);
   const showToast = usePOSStore((s) => s.showToast);
   const activeReward = usePOSStore((s) => s.activeReward);

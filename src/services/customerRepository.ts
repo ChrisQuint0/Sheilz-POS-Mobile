@@ -32,7 +32,7 @@ export interface CustomerSnapshot {
     last_name: string | null;
     redeem_count: number | null;
   }[];
-  loyaltyProgram: LoyaltyProgram | null;
+  loyaltyProgram: LoyaltyProgram | null; // must include reward_type/quantity/discount_amount
 }
 
 export async function getLastCustomerSyncAt(): Promise<string | null> {

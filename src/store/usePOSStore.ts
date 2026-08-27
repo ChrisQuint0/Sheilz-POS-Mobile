@@ -69,10 +69,13 @@ export interface CartItem {
   options?: CartItemOptions;
   unitPrice: number;
   quantity: number;
-  // True when this line item was added via the loyalty "Redeem Free 12oz
-  // Drink" flow. Drives the FREE badge in CartSummary, the "Free (Loyalty)"
-  // label in ReceiptModal, and the loyalty_log insert in syncService.
-  // Forced to unitPrice=0 in the cart — the customer doesn't pay for it.
+  // True when this line was redeemed against the shop's single active
+  // loyalty reward (Free Coffee / Free Pastry / a flat Discount — see
+  // usePOSStore.redeemCartLine). Drives the FREE/discount badge in
+  // CartSummary, the receipt line, and the loyalty_log insert at charge
+  // time (see placeOrder). For Free Coffee/Free Pastry, unitPrice is 0.
+  // For Discount, unitPrice is reduced by redeemedDiscount but may still
+  // be > 0.
   isRedemption?: boolean;
   redeemedDiscount?: number;
   preRedemptionUnitPrice?: number;
@@ -386,6 +389,14 @@ export const usePOSStore = create<POSState>((set, get) => ({
           .join(' ') || undefined
       : customerName;
 
+    // Orders are always created 'Current' (an open ticket) — this is not
+    // the moment redemption finalizes. Supabase's orders_status_check
+    // rejects 'Current' remotely, and the earn-side trigger itself only
+    // fires on transition to 'Completed' — so the redemption's immediate
+    // sync + loyalty_log write happens in updateOrderStatus instead, once
+    // the order actually reaches 'Completed'. Here we only freeze which
+    // reward/points cost applied, so a later change to the active reward
+    // can't retroactively affect this order.
     const newOrder = await createOrder(
       state.cart,
       orderNumber,
@@ -400,6 +411,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       paymentDetail?.cashTendered ?? 0,
       paymentDetail?.changeAmount ?? 0,
     );
+
     set((s) => ({
       orders: [newOrder, ...s.orders],
       cart: [],
