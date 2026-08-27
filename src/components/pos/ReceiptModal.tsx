@@ -220,6 +220,13 @@ export default function ReceiptModal({
                           .join(", ")}
                       </AppText>
                     )}
+                    {item.isRedemption && (
+                      <AppText style={styles.itemOptions}>
+                        {item.redeemedDiscount
+                          ? `Loyalty reward: -₱${item.redeemedDiscount.toFixed(2)}`
+                          : "Free (Loyalty reward)"}
+                      </AppText>
+                    )}
                   </View>
                   <AppText style={[styles.itemQty, { flex: 1 }]}>
                     {item.quantity}
@@ -261,6 +268,23 @@ export default function ReceiptModal({
                   {order.paymentMethod}
                 </AppText>
               </View>
+
+              {order.paymentMethod === "Cash" && (
+                <>
+                  <View style={styles.metaRow}>
+                    <AppText style={styles.metaLabel}>Cash Tendered:</AppText>
+                    <AppText style={styles.metaValue}>
+                      ₱{(order.cashTendered ?? 0).toFixed(2)}
+                    </AppText>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <AppText style={styles.metaLabel}>Change:</AppText>
+                    <AppText style={styles.metaValue}>
+                      ₱{(order.changeAmount ?? 0).toFixed(2)}
+                    </AppText>
+                  </View>
+                </>
+              )}
 
               <View style={styles.dividerDashed} />
 

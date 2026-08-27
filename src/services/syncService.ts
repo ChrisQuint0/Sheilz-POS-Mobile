@@ -57,7 +57,7 @@ async function doRunSync(): Promise<RunSyncResult> {
 
     try {
       const now = new Date().toISOString();
-      const remoteOrders = batch.map((o) => ({
+        const remoteOrders = batch.map((o) => ({
         id: o.id,
         order_id: o.order_number,
         customer_name: o.customer_name,
@@ -72,6 +72,8 @@ async function doRunSync(): Promise<RunSyncResult> {
         created_at: o.created_at,
         synced_at: now,
         customer_id: o.customer_id ?? null,
+        cash_tendered: o.cash_tendered ?? 0,
+        change_amount: o.change_amount ?? 0,
       }));
 
       // Map of local order ID to remote order ID for item syncing
@@ -115,6 +117,8 @@ async function doRunSync(): Promise<RunSyncResult> {
                 last_modified_at: order.last_modified_at,
                 synced_at: order.synced_at,
                 customer_id: order.customer_id,
+                cash_tendered: order.cash_tendered,
+                change_amount: order.change_amount,
               })
               .eq('id', order.id)
               .select();
@@ -171,6 +175,8 @@ async function doRunSync(): Promise<RunSyncResult> {
           quantity: it.quantity,
           unit_price: it.unit_price,
           subtotal: it.subtotal,
+          is_redemption: !!it.is_redemption,
+          redeemed_discount: it.redeemed_discount ?? 0,
         }));
 
         // Try upsert first, fallback to individual if needed
@@ -295,6 +301,123 @@ async function doRunSync(): Promise<RunSyncResult> {
   }
 
   return { attempted: orderRows.length, synced, failed };
+}
+
+export async function syncOrderImmediately(
+  orderId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const db = await getDB();
+  const order = await db.getFirstAsync<any>(`SELECT * FROM orders WHERE id = ?`, [orderId]);
+  if (!order) return { success: false, error: `Order ${orderId} not found locally` };
+  const items = await db.getAllAsync<any>(
+    `SELECT * FROM order_items WHERE order_id = ?`,
+    [orderId],
+  );
+
+  try {
+    const now = new Date().toISOString();
+    const remoteOrder = {
+      id: order.id,
+      order_id: order.order_number,
+      customer_name: order.customer_name,
+      status: order.status,
+      amount: order.amount,
+      payment_method: order.payment_method,
+      cashier_id: order.cashier_id,
+      cashier_name: order.cashier_name,
+      created_by: order.cashier_id,
+      last_modified_by: order.cashier_id,
+      last_modified_at: now,
+      created_at: order.created_at,
+      synced_at: now,
+      customer_id: order.customer_id ?? null,
+      cash_tendered: order.cash_tendered ?? 0,
+      change_amount: order.change_amount ?? 0,
+    };
+
+    const { data: existingOrder, error: checkError } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('id', remoteOrder.id)
+      .maybeSingle();
+    if (checkError) throw checkError;
+
+    if (existingOrder) {
+      const { data: updated, error: updateError } = await supabase
+        .from('orders')
+        .update({
+          customer_name: remoteOrder.customer_name,
+          status: remoteOrder.status,
+          amount: remoteOrder.amount,
+          payment_method: remoteOrder.payment_method,
+          cashier_id: remoteOrder.cashier_id,
+          cashier_name: remoteOrder.cashier_name,
+          last_modified_by: remoteOrder.last_modified_by,
+          last_modified_at: remoteOrder.last_modified_at,
+          synced_at: remoteOrder.synced_at,
+          customer_id: remoteOrder.customer_id,
+          cash_tendered: remoteOrder.cash_tendered,
+          change_amount: remoteOrder.change_amount,
+        })
+        .eq('id', remoteOrder.id)
+        .select();
+      if (updateError) throw updateError;
+      if (!updated || updated.length === 0) {
+        throw new Error(
+          `Update matched 0 rows for order ${remoteOrder.order_id} — likely blocked by RLS`,
+        );
+      }
+    } else {
+      const { error: insertError } = await supabase.from('orders').insert(remoteOrder);
+      if (insertError) throw insertError;
+    }
+
+    if (items.length > 0) {
+      const remoteItems = items.map((it) => ({
+        id: it.id,
+        order_id: it.order_id,
+        product_id: it.product_id,
+        name: it.name,
+        size: it.size,
+        temperature: it.temperature,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        subtotal: it.subtotal,
+        is_redemption: !!it.is_redemption,
+        redeemed_discount: it.redeemed_discount ?? 0,
+      }));
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .upsert(remoteItems, { onConflict: 'id' });
+      if (itemsError) throw itemsError;
+    }
+
+    await db.runAsync(
+      `UPDATE orders SET sync_status = 'synced', synced_at = ?, last_sync_error = NULL WHERE id = ?`,
+      [now, order.id],
+    );
+
+    if (order.status === 'Completed') {
+      const result = await deductInventoryForOrder(order.id);
+      if (!result.success) {
+        console.warn(`Inventory deduction failed for order ${order.id}: ${result.error}`);
+      }
+    }
+
+    const customerRefresh = await syncCustomersFromSupabase();
+    if (!customerRefresh.success) {
+      console.warn(`Customer cache refresh failed after immediate sync: ${customerRefresh.error}`);
+    }
+    return { success: true };
+  } catch (err: any) {
+    const message = err?.message ?? 'Unknown sync error';
+    console.error(`syncOrderImmediately failed for order ${orderId}:`, message);
+    await db.runAsync(
+      `UPDATE orders SET sync_status = 'failed', last_sync_error = ?, sync_retry_count = sync_retry_count + 1 WHERE id = ?`,
+      [message, orderId],
+    );
+    return { success: false, error: message };
+  }
 }
 
 export async function getQueueStats(): Promise<QueueStats> {

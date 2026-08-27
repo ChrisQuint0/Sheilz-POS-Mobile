@@ -15,6 +15,9 @@ export interface Customer {
 export interface LoyaltyProgram {
   id: number;
   points_required: number;
+  reward_type: string;
+  quantity: number | null;
+  discount_amount: number | null;
 }
 
 export interface CustomerSnapshot {
@@ -64,7 +67,13 @@ export async function getLoyaltyProgram(): Promise<LoyaltyProgram | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<any>(`SELECT * FROM loyalty_program LIMIT 1`);
   if (!row) return null;
-  return { id: row.id, points_required: row.points_required };
+  return {
+    id: row.id,
+    points_required: row.points_required,
+    reward_type: row.reward_type,
+    quantity: row.quantity,
+    discount_amount: row.discount_amount,
+  };
 }
 
 // "Last visit" is derived from this device's local order history only — no
@@ -108,8 +117,14 @@ export async function replaceCustomers(snapshot: CustomerSnapshot): Promise<void
 
     if (snapshot.loyaltyProgram) {
       await txn.runAsync(
-        `INSERT INTO loyalty_program (id, points_required) VALUES (?, ?)`,
-        [snapshot.loyaltyProgram.id, snapshot.loyaltyProgram.points_required]
+        `INSERT INTO loyalty_program (id, points_required, reward_type, quantity, discount_amount) VALUES (?, ?, ?, ?, ?)`,
+        [
+          snapshot.loyaltyProgram.id,
+          snapshot.loyaltyProgram.points_required,
+          snapshot.loyaltyProgram.reward_type,
+          snapshot.loyaltyProgram.quantity,
+          snapshot.loyaltyProgram.discount_amount,
+        ]
       );
     }
   });

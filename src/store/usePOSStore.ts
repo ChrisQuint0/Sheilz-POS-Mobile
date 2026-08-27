@@ -1,7 +1,11 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { getDB } from '../lib/db';
-import { createOrder, updateOrderStatus as updateOrderStatusInDb, listOrders } from '../services/orderRepository';
+import { createOrder, getOrderRedemptionMeta, updateOrderStatus as updateOrderStatusInDb, listOrders } from '../services/orderRepository';
+import { syncOrderImmediately } from '../services/syncService';
+import { getLoyaltyProgram, type LoyaltyProgram } from '../services/customerRepository';
+import { insertRedemptionLogs, isFreeItemReward } from '../services/loyaltyService';
+import { useSyncStore } from './useSyncStore';
 
 
 export interface ActiveCustomer {
@@ -9,6 +13,7 @@ export interface ActiveCustomer {
   card_number: string;
   first_name: string | null;
   last_name: string | null;
+  loyalty_progress: number;
 }
 
 export interface ProductSizeOption {
@@ -35,6 +40,7 @@ export interface MenuItem {
   name: string;
   category: string; // category name (denormalized for filtering/display)
   category_id: string;
+  type: string;
   price: number; // lowest variant price — used for card display only
   image: string | null;
   variants: ProductVariant[];
@@ -68,6 +74,8 @@ export interface CartItem {
   // label in ReceiptModal, and the loyalty_log insert in syncService.
   // Forced to unitPrice=0 in the cart — the customer doesn't pay for it.
   isRedemption?: boolean;
+  redeemedDiscount?: number;
+  preRedemptionUnitPrice?: number;
 }
 
 export type OrderStatus = 'Current' | 'Completed' | 'Void (Not Made)' | 'Void (Consumed)';
@@ -81,6 +89,8 @@ export interface Order {
   customerName?: string;
   status: OrderStatus;
   timestamp: string;
+  cashTendered?: number;
+  changeAmount?: number;
 }
 
 export interface AuthProfile {
@@ -103,30 +113,10 @@ interface POSState {
   setActiveCustomer: (customer: ActiveCustomer) => void;
   clearActiveCustomer: () => void;
 
-  // Loyalty redemption mode. When set, the POS is currently configured
-  // for a "free 12oz drink" redemption: ProductOptionModal restricts size
-  // selection to `restrictedSizeId` (and surfaces the FREE badge via the
-  // isRedemption flag on the CartItem). Set by the customer's "Redeem Free
-  // 12oz Drink" action in the scan drawer; cleared on clearCart or after a
-  // successful placeOrder.
-  redemptionMode: {
-    restrictedSizeId: string;
-    restrictedSizeName: string;
-    customerId: number;
-  } | null;
-  enterRedemptionMode: (params: {
-    restrictedSizeId: string;
-    restrictedSizeName: string;
-    customerId: number;
-  }) => void;
-  exitRedemptionMode: () => void;
-  addRedemptionToCart: (
-    item: MenuItem,
-    variantId: string,
-    size: string,
-    temp: string,
-    pointsRequired: number,
-  ) => void;
+  activeReward: LoyaltyProgram | null;
+  hydrateActiveReward: () => Promise<void>;
+  redeemCartLine: (cartItemId: string) => void;
+  undoRedemption: (cartItemId: string) => void;
 
 
   // Navigation & Filtering
@@ -170,7 +160,12 @@ interface POSState {
   orders: Order[];
   setOrders: (orders: Order[]) => void;
   hydrateOrders: () => Promise<void>;
-  placeOrder: (paymentMethod: string, orderNumber: string, customerName?: string) => Promise<void>;
+  placeOrder: (
+    paymentMethod: string,
+    orderNumber: string,
+    customerName?: string,
+    paymentDetail?: { cashTendered: number; changeAmount: number },
+  ) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
 }
 
@@ -213,9 +208,41 @@ export const usePOSStore = create<POSState>((set, get) => ({
   setActiveCustomer: (customer) => set({ activeCustomer: customer }),
   clearActiveCustomer: () => set({ activeCustomer: null }),
 
-  redemptionMode: null,
-  enterRedemptionMode: (params) => set({ redemptionMode: params }),
-  exitRedemptionMode: () => set({ redemptionMode: null }),
+  activeReward: null,
+  hydrateActiveReward: async () => {
+    const reward = await getLoyaltyProgram();
+    set({ activeReward: reward });
+  },
+  redeemCartLine: (cartItemId) => set((state) => {
+    const reward = state.activeReward;
+    const line = state.cart.find((c) => c.cartItemId === cartItemId);
+    if (!reward || !line || line.isRedemption) return state;
+
+    const freeItem = isFreeItemReward(reward);
+    const discountAmount = freeItem ? 0 : Math.min(line.unitPrice, reward.discount_amount ?? 0);
+    const redeemedLine: CartItem = {
+      ...line,
+      quantity: 1,
+      isRedemption: true,
+      preRedemptionUnitPrice: line.unitPrice,
+      redeemedDiscount: discountAmount,
+      unitPrice: freeItem ? 0 : line.unitPrice - discountAmount,
+    };
+
+    if (line.quantity > 1) {
+      return {
+        cart: state.cart
+          .map((c) => c.cartItemId === cartItemId ? { ...c, quantity: c.quantity - 1 } : c)
+          .concat({ ...redeemedLine, cartItemId: `${cartItemId}-redeemed-${Date.now()}` }),
+      };
+    }
+    return {
+      cart: state.cart.map((c) => c.cartItemId === cartItemId ? redeemedLine : c),
+    };
+  }),
+  undoRedemption: (cartItemId) => set((state) => ({
+    cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
+  })),
 
   cart: [],
   addToCart: (item, options, unitPrice, quantity = 1) => set((state) => {
@@ -237,32 +264,6 @@ export const usePOSStore = create<POSState>((set, get) => ({
     return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity }] };
   }),
 
-  addRedemptionToCart: (item, _variantId, size, temp, _pointsRequired) => set((state) => {
-    // Free-drink redemption: always ₱0, qty 1, flagged so cart/receipt/
-    // sync know it's a loyalty redemption (not a regular zero-priced
-    // item). Uses a 'redeem' suffix in cartItemId so it can't collide
-    // with a same-product paid line in the cart.
-    const cartItemId = `${item.id}-${size}-${temp}-redeem`;
-    // Don't double-redeem — if there's already a redemption line of this
-    // exact product+config in the cart, just no-op (UI button stays
-    // disabled while one is present anyway).
-    const existing = state.cart.find((c) => c.cartItemId === cartItemId);
-    if (existing) return state;
-    return {
-      cart: [
-        ...state.cart,
-        {
-          cartItemId,
-          item,
-          options: { size, temp },
-          unitPrice: 0,
-          quantity: 1,
-          isRedemption: true,
-        },
-      ],
-    };
-  }),
-
   removeFromCart: (cartItemId) => set((state) => ({
     cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
   })),
@@ -282,7 +283,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
     };
   }),
 
-  clearCart: () => set({ cart: [], activeCustomer: null, redemptionMode: null }),
+  clearCart: () => set({ cart: [], activeCustomer: null }),
 
   orderSequence: 1,
   lastOrderDate: getTodayString(),
@@ -372,19 +373,13 @@ export const usePOSStore = create<POSState>((set, get) => ({
     const orders = await listOrders();
     set({ orders });
   },
-    placeOrder: async (paymentMethod, orderNumber, customerName) => {
+  placeOrder: async (paymentMethod, orderNumber, customerName, paymentDetail) => {
     const state = get();
-    // Pull the per-line isRedemption flag into a flat list for createOrder.
-    // createOrder will flip the order's is_redemption to 1 if any line is a
-    // redemption, so syncService knows to write the matching loyalty_log row.
     const hasRedemptionLine = state.cart.some((c) => c.isRedemption === true);
+    if (hasRedemptionLine && (!state.activeCustomer || !state.activeReward)) {
+      throw new Error('A redeemed item requires an attached customer and an active reward.');
+    }
 
-    // An attached customer (scanned via Customer Management) always takes
-    // precedence over whatever the cashier manually typed into
-    // PaymentModal's optional name field. "First Last" order, per Ipei.
-    // If the attached customer has neither name on file, we fall back to
-    // undefined (-> 'Walk-In' via createOrder's default), NOT to the manual
-    // name — an attached customer always wins even if their name is blank.
     const resolvedCustomerName = state.activeCustomer
       ? [state.activeCustomer.first_name, state.activeCustomer.last_name]
           .filter(Boolean)
@@ -400,18 +395,62 @@ export const usePOSStore = create<POSState>((set, get) => ({
       resolvedCustomerName,
       state.activeCustomer?.id ?? null,
       hasRedemptionLine,
+      hasRedemptionLine ? state.activeReward!.id : null,
+      hasRedemptionLine ? state.activeReward!.points_required : null,
+      paymentDetail?.cashTendered ?? 0,
+      paymentDetail?.changeAmount ?? 0,
     );
     set((s) => ({
       orders: [newOrder, ...s.orders],
       cart: [],
       activeCustomer: null,
-      redemptionMode: null,
     }));
   },
   updateOrderStatus: async (orderId, status) => {
-    await updateOrderStatusInDb(orderId, status);
+    const meta = await getOrderRedemptionMeta(orderId);
+    if (status === 'Completed' && meta?.hasRedemption) {
+      if (!useSyncStore.getState().isNetworkConnected) {
+        throw new Error(
+          'Completing a redeemed order requires an internet connection. Please connect and try again.',
+        );
+      }
+      if (meta.customerId == null || meta.rewardId == null || meta.pointsRequired == null) {
+        throw new Error(
+          'This order is missing loyalty redemption details and cannot be completed automatically.',
+        );
+      }
+      const previousStatus = get().orders.find((o) => o.id === orderId)?.status ?? 'Current';
+      await updateOrderStatusInDb(orderId, status);
+      const syncResult = await syncOrderImmediately(orderId);
+      if (!syncResult.success) {
+        await updateOrderStatusInDb(orderId, previousStatus);
+        throw new Error(syncResult.error ?? 'Failed to sync redeemed order. Please try again.');
+      }
+      const logResult = await insertRedemptionLogs(
+        meta.customerId,
+        meta.rewardId,
+        meta.pointsRequired,
+        orderId,
+        meta.redeemedCount,
+      );
+      if (!logResult.success) {
+        get().showToast(
+          `Order completed, but the loyalty deduction failed to save: ${logResult.error ?? 'unknown error'}. Please inform your manager.`,
+        );
+      }
+    } else {
+      await updateOrderStatusInDb(orderId, status);
+    }
     set((state) => ({
       orders: state.orders.map((o) => (o.id === orderId ? { ...o, status } : o)),
     }));
+
+    if (status !== 'Current') {
+      useSyncStore.getState().hydrateStats()
+        .then(() => useSyncStore.getState().syncNow())
+        .catch((err) =>
+          console.warn('Background sync after status change failed to start:', err),
+        );
+    }
   },
 }));
