@@ -81,6 +81,24 @@ export interface CartItem {
   preRedemptionUnitPrice?: number;
 }
 
+export const PWD_SENIOR_DISCOUNT_RATE = 0.2;
+
+export function getDiscountedUnitPrice(item: CartItem, pwdSeniorDiscountEnabled: boolean): number {
+  if (!pwdSeniorDiscountEnabled || item.isRedemption) {
+    return item.unitPrice;
+  }
+
+  return Math.round(item.unitPrice * (1 - PWD_SENIOR_DISCOUNT_RATE) * 100) / 100;
+}
+
+export function getCartTotal(cart: CartItem[], pwdSeniorDiscountEnabled: boolean): number {
+  return cart.reduce(
+    (sum, item) =>
+      sum + getDiscountedUnitPrice(item, pwdSeniorDiscountEnabled) * item.quantity,
+    0,
+  );
+}
+
 export type OrderStatus = 'Current' | 'Completed' | 'Void (Not Made)' | 'Void (Consumed)';
 
 export interface Order {
@@ -141,6 +159,8 @@ interface POSState {
   removeFromCart: (cartItemId: string) => void;
   decrementCartItem: (cartItemId: string) => void;
   clearCart: () => void;
+  pwdSeniorDiscountEnabled: boolean;
+  setPwdSeniorDiscountEnabled: (enabled: boolean) => void;
   
   
   // Order Generation
@@ -267,9 +287,10 @@ export const usePOSStore = create<POSState>((set, get) => ({
     return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity }] };
   }),
 
-  removeFromCart: (cartItemId) => set((state) => ({
-    cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
-  })),
+  removeFromCart: (cartItemId) => set((state) => {
+    const cart = state.cart.filter((c) => c.cartItemId !== cartItemId);
+    return { cart, ...(cart.length === 0 ? { pwdSeniorDiscountEnabled: false } : {}) };
+  }),
 
   decrementCartItem: (cartItemId) => set((state) => {
     const existing = state.cart.find((c) => c.cartItemId === cartItemId);
@@ -281,12 +302,13 @@ export const usePOSStore = create<POSState>((set, get) => ({
       };
     }
     // If quantity is 1, remove it
-    return {
-      cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
-    };
+    const cart = state.cart.filter((c) => c.cartItemId !== cartItemId);
+    return { cart, ...(cart.length === 0 ? { pwdSeniorDiscountEnabled: false } : {}) };
   }),
 
-  clearCart: () => set({ cart: [], activeCustomer: null }),
+  clearCart: () => set({ cart: [], activeCustomer: null, pwdSeniorDiscountEnabled: false }),
+  pwdSeniorDiscountEnabled: false,
+  setPwdSeniorDiscountEnabled: (enabled) => set({ pwdSeniorDiscountEnabled: enabled }),
 
   orderSequence: 1,
   lastOrderDate: getTodayString(),
@@ -397,8 +419,13 @@ export const usePOSStore = create<POSState>((set, get) => ({
     // the order actually reaches 'Completed'. Here we only freeze which
     // reward/points cost applied, so a later change to the active reward
     // can't retroactively affect this order.
+    const orderCart = state.cart.map((item) => ({
+      ...item,
+      unitPrice: getDiscountedUnitPrice(item, state.pwdSeniorDiscountEnabled),
+    }));
+
     const newOrder = await createOrder(
-      state.cart,
+      orderCart,
       orderNumber,
       paymentMethod,
       state.userId,
@@ -416,6 +443,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       orders: [newOrder, ...s.orders],
       cart: [],
       activeCustomer: null,
+      pwdSeniorDiscountEnabled: false,
     }));
   },
   updateOrderStatus: async (orderId, status) => {

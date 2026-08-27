@@ -6,9 +6,15 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { usePOSStore, PaymentMethod } from "../../store/usePOSStore";
+import {
+  getCartTotal,
+  getDiscountedUnitPrice,
+  usePOSStore,
+  PaymentMethod,
+} from "../../store/usePOSStore";
 import { useSyncStore } from "../../store/useSyncStore";
 import {
   COLORS,
@@ -48,6 +54,8 @@ export default function CartSummary({
     hydrateActiveReward,
     redeemCartLine,
     undoRedemption,
+    pwdSeniorDiscountEnabled,
+    setPwdSeniorDiscountEnabled,
   } = usePOSStore();
   const isNetworkConnected = useSyncStore((s) => s.isNetworkConnected);
   const [orderNumber, setOrderNumber] = useState("");
@@ -67,7 +75,7 @@ export default function CartSummary({
     hydrateActiveReward();
   }, [hydrateActiveReward]);
 
-  const cartTotal = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
+  const cartTotal = getCartTotal(cart, pwdSeniorDiscountEnabled);
 
   const handleChargeClick = () => {
     setIsPaymentModalVisible(true);
@@ -159,7 +167,9 @@ export default function CartSummary({
                   )}
                 </View>
                 <AppText style={styles.cartItemPrice}>
-                  ₱{(item.unitPrice * item.quantity).toFixed(2)}
+                  ₱{(
+                    getDiscountedUnitPrice(item, pwdSeniorDiscountEnabled) * item.quantity
+                  ).toFixed(2)}
                 </AppText>
               </View>
 
@@ -229,6 +239,21 @@ export default function CartSummary({
       />
 
       <View style={styles.cartFooter}>
+        <View style={styles.discountRow}>
+          <View style={styles.discountLabelArea}>
+            <AppText style={styles.discountLabel}>PWD/Senior Discount</AppText>
+            <AppText style={styles.discountHint}>20% off eligible items</AppText>
+          </View>
+          <Switch
+            value={pwdSeniorDiscountEnabled}
+            onValueChange={setPwdSeniorDiscountEnabled}
+            disabled={cart.length === 0}
+            trackColor={{ false: COLORS.stone200, true: COLORS.roseBlush }}
+            thumbColor={
+              pwdSeniorDiscountEnabled ? COLORS.primary : COLORS.stone100
+            }
+          />
+        </View>
         <View style={styles.cartTotalRow}>
           <AppText style={styles.cartTotalLabel}>Total</AppText>
           <AppText style={styles.cartTotalValue}>
@@ -459,6 +484,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: SPACING.md,
+  },
+  discountRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  discountLabelArea: {
+    flex: 1,
+  },
+  discountLabel: {
+    fontSize: TYPOGRAPHY.sizes.md,
+    fontWeight: TYPOGRAPHY.weights.semibold,
+    color: COLORS.text,
+  },
+  discountHint: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: COLORS.textLight,
+    marginTop: 2,
   },
   cartTotalLabel: {
     fontSize: TYPOGRAPHY.sizes.lg,
