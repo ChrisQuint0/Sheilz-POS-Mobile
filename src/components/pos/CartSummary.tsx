@@ -63,8 +63,6 @@ export default function CartSummary({
     }
   }, [cart.length, orderNumber, generateOrderNumber]);
 
-  // The active reward is shop-wide (one row, status = true), not tied to
-  // any particular customer scan — hydrate it once from the local cache.
   useEffect(() => {
     hydrateActiveReward();
   }, [hydrateActiveReward]);
@@ -78,19 +76,19 @@ export default function CartSummary({
   const handlePaymentConfirm = async (
     method: string,
     customerName?: string,
+    paymentDetail?: { cashTendered: number; changeAmount: number },
   ) => {
     setIsPaymentModalVisible(false);
 
     try {
-      await placeOrder(method, orderNumber, customerName);
+      await placeOrder(method, orderNumber, customerName, paymentDetail);
     } catch (err) {
       console.error("Failed to place order:", err);
-      const message =
-        err instanceof Error
-          ? err.message
-          : "Failed to place order. Please try again.";
-      Alert.alert("Could not complete order", message);
-      return; // don't clear order number or fire onChargeComplete if the write failed
+      Alert.alert(
+        "Could not complete order",
+        err instanceof Error ? err.message : "Failed to place order. Please try again.",
+      );
+      return;
     }
 
     setOrderNumber("");
@@ -131,11 +129,7 @@ export default function CartSummary({
             activeCustomer &&
             activeReward &&
             isLineEligibleForReward(item.item, activeReward) &&
-            canRedeemAnotherLine(
-              activeCustomer.loyalty_progress,
-              cart,
-              activeReward,
-            );
+            canRedeemAnotherLine(activeCustomer.loyalty_progress, cart, activeReward);
           const canRedeemThisLine = eligibleForReward && isNetworkConnected;
           const blockedByOffline = eligibleForReward && !isNetworkConnected;
 
@@ -143,20 +137,14 @@ export default function CartSummary({
             <View style={styles.cartItem}>
               <View style={styles.cartItemMain}>
                 <View style={styles.cartItemTitleArea}>
-                  <AppText style={styles.cartItemName}>
-                    {item.item.name}
-                  </AppText>
+                  <AppText style={styles.cartItemName}>{item.item.name}</AppText>
                   {item.options && (
                     <AppText style={styles.cartItemOptions}>
                       {[
-                        item.options.size !== "One Size"
-                          ? item.options.size
-                          : null,
+                        item.options.size !== "One Size" ? item.options.size : null,
                         item.options.temp !== "None" ? item.options.temp : null,
                         item.options.addon ? "Honey" : null,
-                      ]
-                        .filter(Boolean)
-                        .join(" • ")}
+                      ].filter(Boolean).join(" • ")}
                     </AppText>
                   )}
                   {item.isRedemption && (
@@ -176,16 +164,11 @@ export default function CartSummary({
               </View>
 
               {item.isRedemption ? (
-                // Redeemed lines can only be undone — no quantity change and
-                // no separate delete, since letting the cashier bump a free
-                // line's quantity would silently give away more free items.
                 <TouchableOpacity
                   onPress={() => undoRedemption(item.cartItemId)}
                   style={styles.undoRedeemBtn}
                 >
-                  <AppText style={styles.undoRedeemBtnText}>
-                    Undo reward
-                  </AppText>
+                  <AppText style={styles.undoRedeemBtnText}>Undo reward</AppText>
                 </TouchableOpacity>
               ) : (
                 <>
@@ -194,11 +177,7 @@ export default function CartSummary({
                       onPress={() => redeemCartLine(item.cartItemId)}
                       style={styles.redeemBtn}
                     >
-                      <Ionicons
-                        name="gift-outline"
-                        size={14}
-                        color={COLORS.primary}
-                      />
+                      <Ionicons name="gift-outline" size={14} color={COLORS.primary} />
                       <AppText style={styles.redeemBtnText}>
                         Redeem {activeReward?.reward_type}
                       </AppText>
@@ -206,49 +185,31 @@ export default function CartSummary({
                   )}
                   {blockedByOffline && (
                     <View style={styles.redeemOfflineNotice}>
-                      <Ionicons
-                        name="cloud-offline-outline"
-                        size={14}
-                        color={COLORS.textLight}
-                      />
+                      <Ionicons name="cloud-offline-outline" size={14} color={COLORS.textLight} />
                       <AppText style={styles.redeemOfflineText}>
                         Connect to the internet to redeem
                       </AppText>
                     </View>
                   )}
-
                   <View style={styles.cartItemActions}>
                     <TouchableOpacity
                       onPress={() => decrementCartItem(item.cartItemId)}
                       style={styles.actionBtn}
                     >
-                      <Ionicons
-                        name="remove"
-                        size={18}
-                        color={COLORS.textLight}
-                      />
+                      <Ionicons name="remove" size={18} color={COLORS.textLight} />
                     </TouchableOpacity>
-                    <AppText style={styles.cartItemQty}>
-                      {item.quantity}
-                    </AppText>
+                    <AppText style={styles.cartItemQty}>{item.quantity}</AppText>
                     <TouchableOpacity
-                      onPress={() =>
-                        addToCart(item.item, item.options, item.unitPrice)
-                      }
+                      onPress={() => addToCart(item.item, item.options, item.unitPrice)}
                       style={styles.actionBtn}
                     >
                       <Ionicons name="add" size={18} color={COLORS.textLight} />
                     </TouchableOpacity>
-
                     <TouchableOpacity
                       onPress={() => removeFromCart(item.cartItemId)}
                       style={[styles.actionBtn, styles.deleteBtn]}
                     >
-                      <Ionicons
-                        name="trash-outline"
-                        size={18}
-                        color={COLORS.roseDeep}
-                      />
+                      <Ionicons name="trash-outline" size={18} color={COLORS.roseDeep} />
                     </TouchableOpacity>
                   </View>
                 </>

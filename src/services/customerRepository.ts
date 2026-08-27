@@ -15,11 +15,9 @@ export interface Customer {
 export interface LoyaltyProgram {
   id: number;
   points_required: number;
-  // Only one loyalty_program row is ever active at a time (status = true
-  // server-side) — the shop's single current promotion, not per-customer.
-  reward_type: string; // e.g. 'Free Coffee' | 'Free Pastry' | 'P10 Discount'
-  quantity: number | null; // items awarded — meaningful for Free Coffee/Pastry
-  discount_amount: number | null; // flat peso amount — meaningful for Discount
+  reward_type: string;
+  quantity: number | null;
+  discount_amount: number | null;
 }
 
 export interface CustomerSnapshot {

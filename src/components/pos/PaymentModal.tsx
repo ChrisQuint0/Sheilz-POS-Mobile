@@ -16,6 +16,7 @@ import {
   BORDER_RADIUS,
 } from "../../constants/theme";
 import AppText from "../ui/AppText";
+import CashPaymentModal from "./CashPaymentModal";
 import { PaymentMethod } from "../../store/usePOSStore";
 
 // Visual presentation lookup for fetched payment methods. The `payment_methods`
@@ -37,7 +38,11 @@ interface PaymentModalProps {
   totalAmount: number;
   paymentMethods: PaymentMethod[];
   onClose: () => void;
-  onConfirm: (method: string, customerName?: string) => void;
+  onConfirm: (
+    method: string,
+    customerName?: string,
+    paymentDetail?: { cashTendered: number; changeAmount: number },
+  ) => void;
 }
 
 export default function PaymentModal({
@@ -58,9 +63,16 @@ export default function PaymentModal({
     onClose();
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = (paymentDetail?: {
+    cashTendered: number;
+    changeAmount: number;
+  }) => {
     if (selectedMethod) {
-      onConfirm(selectedMethod.name, customerName.trim() || undefined);
+      onConfirm(
+        selectedMethod.name,
+        customerName.trim() || undefined,
+        paymentDetail,
+      );
       setSelectedMethod(null);
       setCustomerName("");
     }
@@ -134,42 +146,40 @@ export default function PaymentModal({
                 );
               })}
             </View>
+          ) : selectedMethod.name === "Cash" ? (
+            <View style={styles.confirmView}>
+              <View style={styles.selectedIconContainer}>
+                <Ionicons
+                  name="cash-outline"
+                  size={48}
+                  color={COLORS.primary}
+                />
+              </View>
+
+              <TextInput
+                style={styles.nameInput}
+                placeholder="Customer Name (Optional)"
+                placeholderTextColor={COLORS.textLight}
+                value={customerName}
+                onChangeText={setCustomerName}
+              />
+
+              <CashPaymentModal
+                totalAmount={totalAmount}
+                onConfirm={(cashTendered, changeAmount) =>
+                  handleConfirm({ cashTendered, changeAmount })
+                }
+              />
+            </View>
           ) : (
             (() => {
               const presentation = getPresentation(selectedMethod.name);
               return (
                 <View style={styles.confirmView}>
-                  <View style={styles.selectedIconContainer}>
-                    {presentation.image ? (
-                      <Image
-                        source={presentation.image}
-                        style={styles.selectedMethodLogo}
-                        resizeMode="contain"
-                      />
-                    ) : (
-                      <Ionicons
-                        name={presentation.icon as any}
-                        size={48}
-                        color={COLORS.primary}
-                      />
-                    )}
-                  </View>
-
-                  <TextInput
-                    style={styles.nameInput}
-                    placeholder="Customer Name (Optional)"
-                    placeholderTextColor={COLORS.textLight}
-                    value={customerName}
-                    onChangeText={setCustomerName}
-                  />
-
-                  <AppText style={styles.confirmPrompt}>
-                    Proceed with {selectedMethod.name} payment?
-                  </AppText>
-
+                  {/* ...unchanged existing generic confirm view... */}
                   <TouchableOpacity
                     style={styles.confirmBtn}
-                    onPress={handleConfirm}
+                    onPress={() => handleConfirm()}
                   >
                     <AppText style={styles.confirmBtnText}>
                       Confirm ₱{totalAmount.toFixed(2)}

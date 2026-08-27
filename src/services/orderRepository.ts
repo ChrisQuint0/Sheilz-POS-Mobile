@@ -12,7 +12,9 @@ export async function createOrder(
   customerId?: number | null,
   isRedemption?: boolean,
   redeemedRewardId?: number | null,
-  redeemedPointsRequired?: number | null
+  redeemedPointsRequired?: number | null,
+  cashTendered: number = 0,
+  changeAmount: number = 0,
 ): Promise<Order> {
   const db = await getDB();
   const id = Crypto.randomUUID();
@@ -21,10 +23,33 @@ export async function createOrder(
   const status: OrderStatus = 'Current';
 
   await db.withExclusiveTransactionAsync(async (txn) => {
+    // Static column list — cash_tendered/change_amount are always written.
+    // Migration v7 (2026-08-27) guarantees both columns exist on every
+    // device; previously this checked PRAGMA table_info and silently
+    // omitted the columns if missing, which is exactly what let a
+    // migration collision hide a real ₱140/₱60 discrepancy without ever
+    // throwing an error. If the columns are ever missing again for any
+    // reason, this now fails loudly with a SQL error instead.
     await txn.runAsync(
-      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status, customer_id, is_redemption, redeemed_reward_id, redeemed_points_required)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
-      [id, orderNumber, customerName ?? 'Walk-In', status, totalAmount, paymentMethod, cashierId, cashierName, timestamp, customerId ?? null, isRedemption ? 1 : 0, redeemedRewardId ?? null, redeemedPointsRequired ?? null]
+      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status, customer_id, is_redemption, redeemed_reward_id, redeemed_points_required, cash_tendered, change_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        orderNumber,
+        customerName ?? 'Walk-In',
+        status,
+        totalAmount,
+        paymentMethod,
+        cashierId,
+        cashierName,
+        timestamp,
+        customerId ?? null,
+        isRedemption ? 1 : 0,
+        redeemedRewardId ?? null,
+        redeemedPointsRequired ?? null,
+        cashTendered,
+        changeAmount,
+      ]
     );
 
     for (const c of cart) {
@@ -58,6 +83,8 @@ export async function createOrder(
     customerName: customerName || undefined,
     status,
     timestamp,
+    cashTendered,
+    changeAmount,
   };
 }
 
@@ -100,6 +127,32 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   );
 }
 
+export async function getOrderRedemptionMeta(orderId: string): Promise<{
+  hasRedemption: boolean;
+  redeemedCount: number;
+  customerId: number | null;
+  rewardId: number | null;
+  pointsRequired: number | null;
+} | null> {
+  const db = await getDB();
+  const order = await db.getFirstAsync<any>(
+    `SELECT customer_id, redeemed_reward_id, redeemed_points_required FROM orders WHERE id = ?`,
+    [orderId],
+  );
+  if (!order) return null;
+  const countRow = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM order_items WHERE order_id = ? AND is_redemption = 1`,
+    [orderId],
+  );
+  return {
+    hasRedemption: (countRow?.count ?? 0) > 0,
+    redeemedCount: countRow?.count ?? 0,
+    customerId: order.customer_id,
+    rewardId: order.redeemed_reward_id,
+    pointsRequired: order.redeemed_points_required,
+  };
+}
+
 
 export async function listOrders(): Promise<Order[]> {
   const db = await getDB();
@@ -127,7 +180,7 @@ function hydrateOrder(o: any, itemRows: any[]): Order {
         name: i.name,
         category: '',
         category_id: '',
-        type: '', // not stored on order_items — only needed pre-charge for eligibility checks
+        type: '',
         price: i.unit_price,
         image: null,
         variants: [],
@@ -143,5 +196,7 @@ function hydrateOrder(o: any, itemRows: any[]): Order {
     customerName: o.customer_name === 'Walk-In' ? undefined : o.customer_name,
     status: o.status,
     timestamp: o.created_at,
+    cashTendered: o.cash_tendered ?? 0,
+    changeAmount: o.change_amount ?? 0,
   };
 }

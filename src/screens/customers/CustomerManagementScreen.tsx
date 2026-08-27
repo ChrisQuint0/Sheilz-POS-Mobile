@@ -171,6 +171,15 @@ export default function CustomerManagementScreen() {
       getAllCustomersDebug().then(setDebugCustomers);
     }, []),
   );
+  useFocusEffect(
+    useCallback(() => {
+      if (useSyncStore.getState().isNetworkConnected) {
+        syncCustomersFromSupabase().catch((err) => {
+          console.warn("Background customer sync on screen focus failed:", err);
+        });
+      }
+    }, []),
+  );
 
   useFocusEffect(
     useCallback(() => {

@@ -269,6 +269,23 @@ export default function ReceiptModal({
                 </AppText>
               </View>
 
+              {order.paymentMethod === "Cash" && (
+                <>
+                  <View style={styles.metaRow}>
+                    <AppText style={styles.metaLabel}>Cash Tendered:</AppText>
+                    <AppText style={styles.metaValue}>
+                      ₱{(order.cashTendered ?? 0).toFixed(2)}
+                    </AppText>
+                  </View>
+                  <View style={styles.metaRow}>
+                    <AppText style={styles.metaLabel}>Change:</AppText>
+                    <AppText style={styles.metaValue}>
+                      ₱{(order.changeAmount ?? 0).toFixed(2)}
+                    </AppText>
+                  </View>
+                </>
+              )}
+
               <View style={styles.dividerDashed} />
 
               {/* Footer */}

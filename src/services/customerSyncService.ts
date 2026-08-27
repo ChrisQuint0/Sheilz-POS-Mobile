@@ -17,7 +17,6 @@ export async function syncCustomersFromSupabase(): Promise<SyncResult> {
     supabase
       .from('loyalty_program')
       .select('id, points_required, reward_type, quantity, discount_amount')
-      .eq('status', true)
       .limit(1),
   ]);
 
