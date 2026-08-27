@@ -22,6 +22,7 @@ import ReceiptModal from "../../components/pos/ReceiptModal";
 // Store & Theme
 import {
   usePOSStore,
+  getCartTotal,
   MenuItem,
   ProductCategory,
   PaymentMethod,
@@ -47,7 +48,8 @@ export default function POSScreen() {
   const insets = useSafeAreaInsets();
   const isTablet = width >= 768;
 
-  const { cart, addToCart, showToast, orders } = usePOSStore();
+  const { cart, addToCart, showToast, orders, pwdSeniorDiscountEnabled } =
+    usePOSStore();
   const [isCartModalVisible, setIsCartModalVisible] = useState(false);
   const [isReceiptVisible, setIsReceiptVisible] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<MenuItem | null>(null);
@@ -116,7 +118,7 @@ export default function POSScreen() {
     };
   }, []);
 
-  const cartTotal = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
+  const cartTotal = getCartTotal(cart, pwdSeniorDiscountEnabled);
   const cartItemCount = cart.reduce((sum, c) => sum + c.quantity, 0);
 
   const handleChargeComplete = () => {
