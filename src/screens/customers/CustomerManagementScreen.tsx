@@ -8,10 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import {
-  getAllCustomersDebug,
-  type Customer,
-} from "../../services/customerRepository";
+import { type Customer } from "../../services/customerRepository";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import {
   CameraView,
@@ -165,29 +162,8 @@ export default function CustomerManagementScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [manualCardId, setManualCardId] = useState("");
   const [hasScannedOnce, setHasScannedOnce] = useState(false);
-  const [debugCustomers, setDebugCustomers] = useState<Customer[]>([]);
   useFocusEffect(
     useCallback(() => {
-      getAllCustomersDebug().then(setDebugCustomers);
-    }, []),
-  );
-  useFocusEffect(
-    useCallback(() => {
-      if (useSyncStore.getState().isNetworkConnected) {
-        syncCustomersFromSupabase().catch((err) => {
-          console.warn("Background customer sync on screen focus failed:", err);
-        });
-      }
-    }, []),
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      // Refresh the customer cache automatically on focus, so the cashier
-      // doesn't need to visit SyncScreen's manual "Customer Data" sync
-      // button first. Offline: no-op — whatever's cached (however stale)
-      // is shown, same as before this change. SyncScreen itself is
-      // untouched and still works as the manual fallback.
       if (useSyncStore.getState().isNetworkConnected) {
         syncCustomersFromSupabase().catch((err) => {
           console.warn("Background customer sync on screen focus failed:", err);
@@ -329,16 +305,28 @@ export default function CustomerManagementScreen() {
             autoCapitalize="none"
           />
           {error && (
-            <View style={styles.debugBox}>
-              <AppText style={styles.debugTitle}>
-                Local cache: {debugCustomers.length} customer(s)
+            <View style={styles.notFoundChip}>
+              <Ionicons
+                name="alert-circle-outline"
+                size={18}
+                color={COLORS.brick}
+              />
+              <AppText style={styles.notFoundText}>
+                Customer is not in the database.
               </AppText>
-              {debugCustomers.map((c) => (
-                <AppText key={c.id} style={styles.debugRow}>
-                  #{c.card_number} — {c.first_name ?? "?"} {c.last_name ?? "?"}{" "}
-                  (id {c.id})
-                </AppText>
-              ))}
+              <TouchableOpacity
+                style={styles.resyncBtn}
+                onPress={async () => {
+                  try {
+                    await syncCustomersFromSupabase();
+                    showToast("Customer database updated");
+                  } catch (err) {
+                    showToast("Re-sync failed. Check network connection.");
+                  }
+                }}
+              >
+                <AppText style={styles.resyncBtnText}>Re-sync</AppText>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -448,6 +436,34 @@ export default function CustomerManagementScreen() {
 }
 
 const styles = StyleSheet.create({
+  notFoundChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: COLORS.stone100,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    marginBottom: SPACING.md,
+    gap: SPACING.xs,
+  },
+  notFoundText: {
+    flex: 1,
+    fontSize: TYPOGRAPHY.sizes.sm,
+    color: COLORS.rose,
+  },
+  resyncBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 4,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  resyncBtnText: {
+    color: COLORS.surface,
+    fontSize: TYPOGRAPHY.sizes.xs,
+    fontWeight: TYPOGRAPHY.weights.semibold,
+  },
   debugBox: {
     backgroundColor: COLORS.stone100,
     borderRadius: BORDER_RADIUS.md,

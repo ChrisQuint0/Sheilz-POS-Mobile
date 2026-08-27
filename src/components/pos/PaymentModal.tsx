@@ -7,6 +7,10 @@ import {
   Platform,
   Image,
   TextInput,
+  KeyboardAvoidingView,
+  ScrollView,
+  TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
@@ -19,9 +23,6 @@ import AppText from "../ui/AppText";
 import CashPaymentModal from "./CashPaymentModal";
 import { PaymentMethod } from "../../store/usePOSStore";
 
-// Visual presentation lookup for fetched payment methods. The `payment_methods`
-// table has no `image_url` column, so we keep a name -> asset/icon map locally
-// and fall back to a cash icon for anything unmatched.
 const METHOD_PRESENTATION: Record<string, { icon: string | null; image: any }> =
   {
     Cash: { icon: "cash-outline", image: null },
@@ -88,109 +89,135 @@ export default function PaymentModal({
       animationType="fade"
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
-        <View style={styles.modalContent}>
-          <View style={styles.header}>
-            {selectedMethod ? (
-              <TouchableOpacity
-                onPress={() => setSelectedMethod(null)}
-                style={styles.backBtn}
-              >
-                <Ionicons name="arrow-back" size={24} color={COLORS.text} />
-              </TouchableOpacity>
-            ) : (
-              <View style={styles.spacer} />
-            )}
-            <AppText style={styles.title}>
-              {selectedMethod ? "Confirm Payment" : "Select Payment"}
-            </AppText>
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={24} color={COLORS.textLight} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.amountContainer}>
-            <AppText style={styles.amountLabel}>Total Due</AppText>
-            <AppText style={styles.amountValue}>
-              ₱{totalAmount.toFixed(2)}
-            </AppText>
-          </View>
-
-          {!selectedMethod ? (
-            <View style={styles.grid}>
-              {paymentMethods.map((method) => {
-                const presentation = getPresentation(method.name);
-                return (
-                  <TouchableOpacity
-                    key={method.id}
-                    style={styles.methodCard}
-                    onPress={() => setSelectedMethod(method)}
-                  >
-                    <View style={styles.iconContainer}>
-                      {presentation.image ? (
-                        <Image
-                          source={presentation.image}
-                          style={styles.methodLogo}
-                          resizeMode="contain"
-                        />
-                      ) : (
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.overlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.keyboardView}
+          >
+            <ScrollView
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <TouchableWithoutFeedback>
+                <View style={styles.modalContent}>
+                  <View style={styles.header}>
+                    {selectedMethod ? (
+                      <TouchableOpacity
+                        onPress={() => setSelectedMethod(null)}
+                        style={styles.backBtn}
+                      >
                         <Ionicons
-                          name={presentation.icon as any}
-                          size={32}
+                          name="arrow-back"
+                          size={24}
+                          color={COLORS.text}
+                        />
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.spacer} />
+                    )}
+                    <AppText style={styles.title}>
+                      {selectedMethod ? "Confirm Payment" : "Select Payment"}
+                    </AppText>
+                    <TouchableOpacity
+                      onPress={handleClose}
+                      style={styles.closeBtn}
+                    >
+                      <Ionicons
+                        name="close"
+                        size={24}
+                        color={COLORS.textLight}
+                      />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.amountContainer}>
+                    <AppText style={styles.amountLabel}>Total Due</AppText>
+                    <AppText style={styles.amountValue}>
+                      ₱{totalAmount.toFixed(2)}
+                    </AppText>
+                  </View>
+
+                  {!selectedMethod ? (
+                    <View style={styles.grid}>
+                      {paymentMethods.map((method) => {
+                        const presentation = getPresentation(method.name);
+                        return (
+                          <TouchableOpacity
+                            key={method.id}
+                            style={styles.methodCard}
+                            onPress={() => setSelectedMethod(method)}
+                          >
+                            <View style={styles.iconContainer}>
+                              {presentation.image ? (
+                                <Image
+                                  source={presentation.image}
+                                  style={styles.methodLogo}
+                                  resizeMode="contain"
+                                />
+                              ) : (
+                                <Ionicons
+                                  name={presentation.icon as any}
+                                  size={32}
+                                  color={COLORS.primary}
+                                />
+                              )}
+                            </View>
+                            <AppText style={styles.methodLabel}>
+                              {method.name}
+                            </AppText>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ) : selectedMethod.name === "Cash" ? (
+                    <View style={styles.confirmView}>
+                      <View style={styles.selectedIconContainer}>
+                        <Ionicons
+                          name="cash-outline"
+                          size={48}
                           color={COLORS.primary}
                         />
-                      )}
+                      </View>
+
+                      <TextInput
+                        style={styles.nameInput}
+                        placeholder="Customer Name (Optional)"
+                        placeholderTextColor={COLORS.textLight}
+                        value={customerName}
+                        onChangeText={setCustomerName}
+                      />
+
+                      <CashPaymentModal
+                        totalAmount={totalAmount}
+                        onConfirm={(cashTendered, changeAmount) =>
+                          handleConfirm({ cashTendered, changeAmount })
+                        }
+                      />
                     </View>
-                    <AppText style={styles.methodLabel}>{method.name}</AppText>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : selectedMethod.name === "Cash" ? (
-            <View style={styles.confirmView}>
-              <View style={styles.selectedIconContainer}>
-                <Ionicons
-                  name="cash-outline"
-                  size={48}
-                  color={COLORS.primary}
-                />
-              </View>
-
-              <TextInput
-                style={styles.nameInput}
-                placeholder="Customer Name (Optional)"
-                placeholderTextColor={COLORS.textLight}
-                value={customerName}
-                onChangeText={setCustomerName}
-              />
-
-              <CashPaymentModal
-                totalAmount={totalAmount}
-                onConfirm={(cashTendered, changeAmount) =>
-                  handleConfirm({ cashTendered, changeAmount })
-                }
-              />
-            </View>
-          ) : (
-            (() => {
-              const presentation = getPresentation(selectedMethod.name);
-              return (
-                <View style={styles.confirmView}>
-                  {/* ...unchanged existing generic confirm view... */}
-                  <TouchableOpacity
-                    style={styles.confirmBtn}
-                    onPress={() => handleConfirm()}
-                  >
-                    <AppText style={styles.confirmBtnText}>
-                      Confirm ₱{totalAmount.toFixed(2)}
-                    </AppText>
-                  </TouchableOpacity>
+                  ) : (
+                    (() => {
+                      return (
+                        <View style={styles.confirmView}>
+                          <TouchableOpacity
+                            style={styles.confirmBtn}
+                            onPress={() => handleConfirm()}
+                          >
+                            <AppText style={styles.confirmBtnText}>
+                              Confirm ₱{totalAmount.toFixed(2)}
+                            </AppText>
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })()
+                  )}
                 </View>
-              );
-            })()
-          )}
+              </TouchableWithoutFeedback>
+            </ScrollView>
+          </KeyboardAvoidingView>
         </View>
-      </View>
+      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -199,8 +226,15 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingVertical: SPACING.xl,
   },
   modalContent: {
     width: "85%",
@@ -221,7 +255,7 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.md,
   },
   spacer: {
-    width: 32, // to balance the close button width
+    width: 32,
   },
   backBtn: {
     padding: SPACING.xs,
