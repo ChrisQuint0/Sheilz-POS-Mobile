@@ -127,31 +127,6 @@ export async function updateOrderStatus(orderId: string, status: OrderStatus): P
   );
 }
 
-export async function getOrderRedemptionMeta(orderId: string): Promise<{
-  hasRedemption: boolean;
-  redeemedCount: number;
-  customerId: number | null;
-  rewardId: number | null;
-  pointsRequired: number | null;
-} | null> {
-  const db = await getDB();
-  const order = await db.getFirstAsync<any>(
-    `SELECT customer_id, redeemed_reward_id, redeemed_points_required FROM orders WHERE id = ?`,
-    [orderId],
-  );
-  if (!order) return null;
-  const countRow = await db.getFirstAsync<{ count: number }>(
-    `SELECT COUNT(*) as count FROM order_items WHERE order_id = ? AND is_redemption = 1`,
-    [orderId],
-  );
-  return {
-    hasRedemption: (countRow?.count ?? 0) > 0,
-    redeemedCount: countRow?.count ?? 0,
-    customerId: order.customer_id,
-    rewardId: order.redeemed_reward_id,
-    pointsRequired: order.redeemed_points_required,
-  };
-}
 
 
 export async function listOrders(): Promise<Order[]> {
