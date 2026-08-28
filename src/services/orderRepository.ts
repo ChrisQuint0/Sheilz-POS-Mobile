@@ -15,24 +15,20 @@ export async function createOrder(
   redeemedPointsRequired?: number | null,
   cashTendered: number = 0,
   changeAmount: number = 0,
+  id: string = Crypto.randomUUID(), // NEW — lets caller pre-generate (PayMongo flow)
+  isPaid: boolean = false,           // NEW
 ): Promise<Order> {
   const db = await getDB();
-  const id = Crypto.randomUUID();
+  // id is now a parameter, not generated here — the line below is removed:
+  // const id = Crypto.randomUUID();
   const totalAmount = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
   const timestamp = new Date().toISOString();
   const status: OrderStatus = 'Current';
 
   await db.withExclusiveTransactionAsync(async (txn) => {
-    // Static column list — cash_tendered/change_amount are always written.
-    // Migration v7 (2026-08-27) guarantees both columns exist on every
-    // device; previously this checked PRAGMA table_info and silently
-    // omitted the columns if missing, which is exactly what let a
-    // migration collision hide a real ₱140/₱60 discrepancy without ever
-    // throwing an error. If the columns are ever missing again for any
-    // reason, this now fails loudly with a SQL error instead.
     await txn.runAsync(
-      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status, customer_id, is_redemption, redeemed_reward_id, redeemed_points_required, cash_tendered, change_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status, customer_id, is_redemption, redeemed_reward_id, redeemed_points_required, cash_tendered, change_amount, is_paid)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         orderNumber,
@@ -49,6 +45,7 @@ export async function createOrder(
         redeemedPointsRequired ?? null,
         cashTendered,
         changeAmount,
+        isPaid ? 1 : 0,
       ]
     );
 
@@ -85,6 +82,7 @@ export async function createOrder(
     timestamp,
     cashTendered,
     changeAmount,
+    isPaid,  // NEW — see Order interface addition below
   };
 }
 
@@ -122,8 +120,10 @@ export async function getOrderRedemptionMeta(orderId: string): Promise<{
 export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
   const db = await getDB();
   await db.runAsync(
-    `UPDATE orders SET status = ?, sync_status = 'pending' WHERE id = ?`,
-    [status, orderId]
+    status === 'Completed'
+      ? `UPDATE orders SET status = ?, is_paid = 1, sync_status = 'pending' WHERE id = ?`
+      : `UPDATE orders SET status = ?, sync_status = 'pending' WHERE id = ?`,
+    [status, orderId],
   );
 }
 
@@ -173,5 +173,6 @@ function hydrateOrder(o: any, itemRows: any[]): Order {
     timestamp: o.created_at,
     cashTendered: o.cash_tendered ?? 0,
     changeAmount: o.change_amount ?? 0,
+    isPaid: !!o.is_paid,  // NEW
   };
 }

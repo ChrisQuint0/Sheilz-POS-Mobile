@@ -6,6 +6,7 @@ import { syncOrderImmediately } from '../services/syncService';
 import { getLoyaltyProgram, type LoyaltyProgram } from '../services/customerRepository';
 import { insertRedemptionLogs, isFreeItemReward } from '../services/loyaltyService';
 import { useSyncStore } from './useSyncStore';
+import { getPaymongoEnabled, setPaymongoEnabled } from '../services/settingsRepository';
 
 
 export interface ActiveCustomer {
@@ -112,6 +113,7 @@ export interface Order {
   timestamp: string;
   cashTendered?: number;
   changeAmount?: number;
+  isPaid?: boolean;  // NEW
 }
 
 export interface AuthProfile {
@@ -161,6 +163,10 @@ interface POSState {
   clearCart: () => void;
   pwdSeniorDiscountEnabled: boolean;
   setPwdSeniorDiscountEnabled: (enabled: boolean) => void;
+
+  paymongoEnabled: boolean;
+  hydratePaymongoEnabled: () => Promise<void>;
+  setPaymongoEnabledPref: (enabled: boolean) => Promise<void>;
   
   
   // Order Generation
@@ -183,11 +189,16 @@ interface POSState {
   orders: Order[];
   setOrders: (orders: Order[]) => void;
   hydrateOrders: () => Promise<void>;
-  placeOrder: (
+    placeOrder: (
     paymentMethod: string,
     orderNumber: string,
     customerName?: string,
-    paymentDetail?: { cashTendered: number; changeAmount: number },
+    paymentDetail?: {
+      cashTendered?: number;
+      changeAmount?: number;
+      id?: string;
+      isPaid?: boolean;
+    },
   ) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => Promise<void>;
 }
@@ -286,6 +297,17 @@ export const usePOSStore = create<POSState>((set, get) => ({
     }
     return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity }] };
   }),
+
+
+  paymongoEnabled: false,
+  hydratePaymongoEnabled: async () => {
+    const enabled = await getPaymongoEnabled();
+    set({ paymongoEnabled: enabled });
+  },
+  setPaymongoEnabledPref: async (enabled) => {
+    await setPaymongoEnabled(enabled);
+    set({ paymongoEnabled: enabled });
+  },
 
   removeFromCart: (cartItemId) => set((state) => {
     const cart = state.cart.filter((c) => c.cartItemId !== cartItemId);
@@ -424,7 +446,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       unitPrice: getDiscountedUnitPrice(item, state.pwdSeniorDiscountEnabled),
     }));
 
-    const newOrder = await createOrder(
+      const newOrder = await createOrder(
       orderCart,
       orderNumber,
       paymentMethod,
@@ -437,6 +459,8 @@ export const usePOSStore = create<POSState>((set, get) => ({
       hasRedemptionLine ? state.activeReward!.points_required : null,
       paymentDetail?.cashTendered ?? 0,
       paymentDetail?.changeAmount ?? 0,
+      paymentDetail?.id,       // NEW — undefined falls through to createOrder's own default
+      paymentDetail?.isPaid ?? false,  // NEW
     );
 
     set((s) => ({
@@ -461,11 +485,13 @@ export const usePOSStore = create<POSState>((set, get) => ({
       }
       const previousStatus = get().orders.find((o) => o.id === orderId)?.status ?? 'Current';
       await updateOrderStatusInDb(orderId, status);
+      const syncStartedAt = Date.now();
       const syncResult = await syncOrderImmediately(orderId);
       if (!syncResult.success) {
         await updateOrderStatusInDb(orderId, previousStatus);
         throw new Error(syncResult.error ?? 'Failed to sync redeemed order. Please try again.');
       }
+      useSyncStore.getState().recordSyncSuccess(1, Date.now() - syncStartedAt);
       const logResult = await insertRedemptionLogs(
         meta.customerId,
         meta.rewardId,
@@ -482,7 +508,11 @@ export const usePOSStore = create<POSState>((set, get) => ({
       await updateOrderStatusInDb(orderId, status);
     }
     set((state) => ({
-      orders: state.orders.map((o) => (o.id === orderId ? { ...o, status } : o)),
+      orders: state.orders.map((o) =>
+        o.id === orderId
+          ? { ...o, status, ...(status === 'Completed' ? { isPaid: true } : {}) }
+          : o,
+      ),
     }));
 
     if (status !== 'Current') {

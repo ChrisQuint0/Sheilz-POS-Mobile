@@ -22,6 +22,16 @@ import {
 import AppText from "../ui/AppText";
 import CashPaymentModal from "./CashPaymentModal";
 import { PaymentMethod } from "../../store/usePOSStore";
+import PayMongoPaymentModal from "./PayMongoPaymentModal";
+import { usePOSStore } from "../../store/usePOSStore";
+
+const PAYMONGO_TILE: PaymentMethod = {
+  id: "__paymongo__",
+  name: "PayMongo",
+  is_enabled: true,
+};
+
+const PAYMONGO_PRESENTATION = { icon: "qr-code-outline", image: null };
 
 const METHOD_PRESENTATION: Record<string, { icon: string | null; image: any }> =
   {
@@ -42,7 +52,12 @@ interface PaymentModalProps {
   onConfirm: (
     method: string,
     customerName?: string,
-    paymentDetail?: { cashTendered: number; changeAmount: number },
+    paymentDetail?: {
+      cashTendered?: number;
+      changeAmount?: number;
+      id?: string;
+      isPaid?: boolean;
+    },
   ) => void;
 }
 
@@ -58,6 +73,14 @@ export default function PaymentModal({
   );
   const [customerName, setCustomerName] = useState("");
 
+  const paymongoEnabled = usePOSStore((s) => s.paymongoEnabled);
+
+  const displayedMethods = paymongoEnabled
+    ? [...paymentMethods, PAYMONGO_TILE]
+    : paymentMethods;
+
+  const isPaymongoActive = selectedMethod?.id === "__paymongo__";
+
   const handleClose = () => {
     setSelectedMethod(null);
     setCustomerName("");
@@ -65,14 +88,19 @@ export default function PaymentModal({
   };
 
   const handleConfirm = (paymentDetail?: {
-    cashTendered: number;
-    changeAmount: number;
+    cashTendered?: number;
+    changeAmount?: number;
+    id?: string;
+    isPaid?: boolean;
   }) => {
     if (selectedMethod) {
       onConfirm(
         selectedMethod.name,
         customerName.trim() || undefined,
-        paymentDetail,
+        // Reaching this callback means the selected payment method has been
+        // confirmed. PayMongo supplies its own explicit value; all other
+        // methods are paid synchronously here.
+        { ...paymentDetail, isPaid: paymentDetail?.isPaid ?? true },
       );
       setSelectedMethod(null);
       setCustomerName("");
@@ -83,142 +111,173 @@ export default function PaymentModal({
     METHOD_PRESENTATION[name] ?? DEFAULT_PRESENTATION;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.overlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.keyboardView}
-          >
-            <ScrollView
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+    <>
+      <Modal
+        visible={visible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleClose}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.overlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : "height"}
+              style={styles.keyboardView}
             >
-              <TouchableWithoutFeedback>
-                <View style={styles.modalContent}>
-                  <View style={styles.header}>
-                    {selectedMethod ? (
+              <ScrollView
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <TouchableWithoutFeedback>
+                  <View style={styles.modalContent}>
+                    <View style={styles.header}>
+                      {selectedMethod ? (
+                        <TouchableOpacity
+                          onPress={() => setSelectedMethod(null)}
+                          style={styles.backBtn}
+                        >
+                          <Ionicons
+                            name="arrow-back"
+                            size={24}
+                            color={COLORS.text}
+                          />
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.spacer} />
+                      )}
+                      <AppText style={styles.title}>
+                        {selectedMethod ? "Confirm Payment" : "Select Payment"}
+                      </AppText>
                       <TouchableOpacity
-                        onPress={() => setSelectedMethod(null)}
-                        style={styles.backBtn}
+                        onPress={handleClose}
+                        style={styles.closeBtn}
                       >
                         <Ionicons
-                          name="arrow-back"
+                          name="close"
                           size={24}
-                          color={COLORS.text}
+                          color={COLORS.textLight}
                         />
                       </TouchableOpacity>
-                    ) : (
-                      <View style={styles.spacer} />
-                    )}
-                    <AppText style={styles.title}>
-                      {selectedMethod ? "Confirm Payment" : "Select Payment"}
-                    </AppText>
-                    <TouchableOpacity
-                      onPress={handleClose}
-                      style={styles.closeBtn}
-                    >
-                      <Ionicons
-                        name="close"
-                        size={24}
-                        color={COLORS.textLight}
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.amountContainer}>
-                    <AppText style={styles.amountLabel}>Total Due</AppText>
-                    <AppText style={styles.amountValue}>
-                      ₱{totalAmount.toFixed(2)}
-                    </AppText>
-                  </View>
-
-                  {!selectedMethod ? (
-                    <View style={styles.grid}>
-                      {paymentMethods.map((method) => {
-                        const presentation = getPresentation(method.name);
-                        return (
-                          <TouchableOpacity
-                            key={method.id}
-                            style={styles.methodCard}
-                            onPress={() => setSelectedMethod(method)}
-                          >
-                            <View style={styles.iconContainer}>
-                              {presentation.image ? (
-                                <Image
-                                  source={presentation.image}
-                                  style={styles.methodLogo}
-                                  resizeMode="contain"
-                                />
-                              ) : (
-                                <Ionicons
-                                  name={presentation.icon as any}
-                                  size={32}
-                                  color={COLORS.primary}
-                                />
-                              )}
-                            </View>
-                            <AppText style={styles.methodLabel}>
-                              {method.name}
-                            </AppText>
-                          </TouchableOpacity>
-                        );
-                      })}
                     </View>
-                  ) : selectedMethod.name === "Cash" ? (
-                    <View style={styles.confirmView}>
-                      <View style={styles.selectedIconContainer}>
-                        <Ionicons
-                          name="cash-outline"
-                          size={48}
-                          color={COLORS.primary}
+
+                    <View style={styles.amountContainer}>
+                      <AppText style={styles.amountLabel}>Total Due</AppText>
+                      <AppText style={styles.amountValue}>
+                        ₱{totalAmount.toFixed(2)}
+                      </AppText>
+                    </View>
+
+                    {!selectedMethod ? (
+                      <View style={styles.grid}>
+                        {displayedMethods.map((method) => {
+                          const presentation =
+                            method.id === "__paymongo__"
+                              ? PAYMONGO_PRESENTATION
+                              : getPresentation(method.name);
+                          return (
+                            <TouchableOpacity
+                              key={method.id}
+                              style={styles.methodCard}
+                              onPress={() => setSelectedMethod(method)}
+                            >
+                              <View style={styles.iconContainer}>
+                                {presentation.image ? (
+                                  <Image
+                                    source={presentation.image}
+                                    style={styles.methodLogo}
+                                    resizeMode="contain"
+                                  />
+                                ) : (
+                                  <Ionicons
+                                    name={presentation.icon as any}
+                                    size={32}
+                                    color={COLORS.primary}
+                                  />
+                                )}
+                              </View>
+                              <AppText style={styles.methodLabel}>
+                                {method.name}
+                              </AppText>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ) : selectedMethod.name === "Cash" ? (
+                      <View style={styles.confirmView}>
+                        <View style={styles.selectedIconContainer}>
+                          <Ionicons
+                            name="cash-outline"
+                            size={48}
+                            color={COLORS.primary}
+                          />
+                        </View>
+
+                        <TextInput
+                          style={styles.nameInput}
+                          placeholder="Customer Name (Optional)"
+                          placeholderTextColor={COLORS.textLight}
+                          value={customerName}
+                          onChangeText={setCustomerName}
+                        />
+
+                        <CashPaymentModal
+                          totalAmount={totalAmount}
+                          onConfirm={(cashTendered, changeAmount) =>
+                            handleConfirm({ cashTendered, changeAmount })
+                          }
                         />
                       </View>
+                    ) : isPaymongoActive ? (
+                      // PayMongo's actual checkout UI renders in a separate
+                      // full-screen Modal (see below, outside this small
+                      // card) — a WebView needs real screen space and
+                      // can't live inside this ScrollView without a touch/
+                      // scroll-gesture conflict. This branch just shows a
+                      // brief "opening..." placeholder in the small card
+                      // while that full-screen modal takes over.
+                      <View style={styles.confirmView}>
+                        <AppText style={styles.confirmPrompt}>
+                          Opening PayMongo checkout...
+                        </AppText>
+                      </View>
+                    ) : (
+                      (() => {
+                        return (
+                          <View style={styles.confirmView}>
+                            <TouchableOpacity
+                              style={styles.confirmBtn}
+                              onPress={() => handleConfirm()}
+                            >
+                              <AppText style={styles.confirmBtnText}>
+                                Confirm ₱{totalAmount.toFixed(2)}
+                              </AppText>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })()
+                    )}
+                  </View>
+                </TouchableWithoutFeedback>
+              </ScrollView>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
-                      <TextInput
-                        style={styles.nameInput}
-                        placeholder="Customer Name (Optional)"
-                        placeholderTextColor={COLORS.textLight}
-                        value={customerName}
-                        onChangeText={setCustomerName}
-                      />
-
-                      <CashPaymentModal
-                        totalAmount={totalAmount}
-                        onConfirm={(cashTendered, changeAmount) =>
-                          handleConfirm({ cashTendered, changeAmount })
-                        }
-                      />
-                    </View>
-                  ) : (
-                    (() => {
-                      return (
-                        <View style={styles.confirmView}>
-                          <TouchableOpacity
-                            style={styles.confirmBtn}
-                            onPress={() => handleConfirm()}
-                          >
-                            <AppText style={styles.confirmBtnText}>
-                              Confirm ₱{totalAmount.toFixed(2)}
-                            </AppText>
-                          </TouchableOpacity>
-                        </View>
-                      );
-                    })()
-                  )}
-                </View>
-              </TouchableWithoutFeedback>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+      {/* Separate, full-screen modal — stacks on top of the small card
+          above whenever PayMongo is the selected method. Kept as a sibling
+          rather than nested inside the ScrollView above so the WebView
+          gets real screen space and its own touch/scroll handling. */}
+      <PayMongoPaymentModal
+        visible={isPaymongoActive}
+        totalAmount={totalAmount}
+        onConfirm={(paymentDetail: { id: string; isPaid: true }) =>
+          handleConfirm(paymentDetail)
+        }
+        onCancel={() => setSelectedMethod(null)}
+      />
+    </>
   );
 }
 

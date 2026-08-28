@@ -74,6 +74,7 @@ async function doRunSync(): Promise<RunSyncResult> {
         customer_id: o.customer_id ?? null,
         cash_tendered: o.cash_tendered ?? 0,
         change_amount: o.change_amount ?? 0,
+        is_paid: o.status === 'Completed' || !!o.is_paid,
       }));
 
       // Map of local order ID to remote order ID for item syncing
@@ -119,6 +120,7 @@ async function doRunSync(): Promise<RunSyncResult> {
                 customer_id: order.customer_id,
                 cash_tendered: order.cash_tendered,
                 change_amount: order.change_amount,
+                is_paid: order.is_paid,
               })
               .eq('id', order.id)
               .select();
@@ -333,6 +335,7 @@ export async function syncOrderImmediately(
       customer_id: order.customer_id ?? null,
       cash_tendered: order.cash_tendered ?? 0,
       change_amount: order.change_amount ?? 0,
+      is_paid: order.status === 'Completed' || !!order.is_paid,
     };
 
     const { data: existingOrder, error: checkError } = await supabase
@@ -358,6 +361,7 @@ export async function syncOrderImmediately(
           customer_id: remoteOrder.customer_id,
           cash_tendered: remoteOrder.cash_tendered,
           change_amount: remoteOrder.change_amount,
+          is_paid: remoteOrder.is_paid,
         })
         .eq('id', remoteOrder.id)
         .select();

@@ -31,6 +31,7 @@ interface SyncState {
 
   // Actions
   syncNow: () => Promise<void>;
+  recordSyncSuccess: (recordsUploaded: number, durationMs: number) => void;
   retryFailed: () => Promise<void>;
   toggleAutoSync: () => void;
   setNetworkStatus: (isConnected: boolean) => void;
@@ -114,6 +115,23 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       // so status doesn't get stuck on 'Syncing'.
       set({ status: 'Sync Failed' });
     }
+  },
+
+  recordSyncSuccess: (recordsUploaded, durationMs) => {
+    const now = new Date().toISOString();
+    set((state) => ({
+      lastSyncTimestamp: now,
+      syncHistory: [
+        {
+          id: generateId(),
+          timestamp: now,
+          recordsUploaded,
+          durationMs,
+          result: 'Success' as const,
+        },
+        ...state.syncHistory,
+      ].slice(0, 50),
+    }));
   },
 
   retryFailed: async () => {
