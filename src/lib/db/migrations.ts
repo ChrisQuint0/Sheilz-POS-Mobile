@@ -9,6 +9,30 @@ type Migration = {
 
 const MIGRATIONS: Migration[] = [
   {
+    version: 10,
+    // PayMongo online payments support. Adds orders.is_paid — a local
+    // mirror of the Supabase column of the same name — so createOrder/
+    // hydrateOrder can read/write payment status without a remote
+    // round-trip. This is distinct from orders.status: is_paid tracks
+    // whether PayMongo checkout succeeded, status tracks whether the
+    // order has been fulfilled (Current/Completed/Void) — the two are
+    // allowed to disagree (e.g. paid but not yet made).
+    //
+    // Uses the conditional-add pattern (not a plain sql string) as a
+    // precaution — this file has a documented history of version
+    // collisions (see v6/v7, v8/v9 comments below) causing ALTER TABLE
+    // to throw on columns that already exist on some devices. Safe no-op
+    // if is_paid is somehow already present.
+    run: async (txn) => {
+      const columns = await txn.getAllAsync(`PRAGMA table_info('orders')`);
+      if (!columns.some((c: any) => c.name === 'is_paid')) {
+        await txn.execAsync(
+          `ALTER TABLE orders ADD COLUMN is_paid INTEGER NOT NULL DEFAULT 0;`,
+        );
+      }
+    },
+  },
+  {
     version: 9,
     // Redemption reward metadata was originally shipped as v7. Keep this
     // repair migration separate from the cash migrations so upgraded

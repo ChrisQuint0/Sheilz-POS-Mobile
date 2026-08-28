@@ -31,6 +31,7 @@ import { DrawerNavigationProp } from "@react-navigation/drawer";
 import { styles } from "./SyncScreen.styles";
 import { getLastCustomerSyncAt } from "../../services/customerRepository";
 import { syncCustomersFromSupabase } from "../../services/customerSyncService";
+import { usePOSStore } from "../../store/usePOSStore";
 // ─── Status Helpers ─────────────────────────────────────────────
 const STATUS_CONFIG: Record<
   SyncStatus,
@@ -262,6 +263,8 @@ export default function SyncScreen() {
     toggleAutoSync,
     clearHistory,
   } = useSyncStore();
+  const { paymongoEnabled, hydratePaymongoEnabled, setPaymongoEnabledPref } =
+    usePOSStore();
 
   const totalPending = pendingTransactions + pendingInventory + failedRecords;
   const isSyncing = status === "Syncing";
@@ -285,11 +288,12 @@ export default function SyncScreen() {
       getLastCustomerSyncAt().then((value) => {
         if (isMounted) setCustomerSyncedAt(value);
       });
+      hydratePaymongoEnabled(); // NEW
       useSyncStore.getState().hydrateStats();
       return () => {
         isMounted = false;
       };
-    }, []),
+    }, [hydratePaymongoEnabled]),
   );
 
   // Pulse animation for hero icon
@@ -680,6 +684,39 @@ export default function SyncScreen() {
                     />
                   )}
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.settingDivider} />
+
+              <View style={styles.settingRow}>
+                <View
+                  style={[
+                    styles.settingIconWrap,
+                    { backgroundColor: COLORS.roseBlushSoft },
+                  ]}
+                >
+                  <Ionicons
+                    name="qr-code-outline"
+                    size={18}
+                    color={COLORS.primary}
+                  />
+                </View>
+                <View style={styles.settingInfo}>
+                  <AppText style={styles.settingLabel}>
+                    PayMongo Online Payments
+                  </AppText>
+                  <AppText style={styles.settingSub}>
+                    {paymongoEnabled
+                      ? "Shown as a payment option at checkout"
+                      : "Hidden from the payment method grid"}
+                  </AppText>
+                </View>
+                <Switch
+                  value={paymongoEnabled}
+                  onValueChange={setPaymongoEnabledPref}
+                  trackColor={{ false: COLORS.stone200, true: COLORS.sage }}
+                  thumbColor={COLORS.surface}
+                />
               </View>
             </View>
           </View>
