@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "sheilz-pos-mobile",
+    "name": "Sheilz POS Mobile",
     "slug": "sheilz-pos-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/sheilz_pos_official_logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/sheilz_pos_official_logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
