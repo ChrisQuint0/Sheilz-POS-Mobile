@@ -57,25 +57,26 @@ async function doRunSync(): Promise<RunSyncResult> {
 
     try {
       const now = new Date().toISOString();
-        const remoteOrders = batch.map((o) => ({
-        id: o.id,
-        order_id: o.order_number,
-        customer_name: o.customer_name,
-        status: o.status,
-        amount: o.amount,
-        payment_method: o.payment_method,
-        cashier_id: o.cashier_id,
-        cashier_name: o.cashier_name,
-        created_by: o.cashier_id,
-        last_modified_by: o.cashier_id,
-        last_modified_at: now,
-        created_at: o.created_at,
-        synced_at: now,
-        customer_id: o.customer_id ?? null,
-        cash_tendered: o.cash_tendered ?? 0,
-        change_amount: o.change_amount ?? 0,
-        is_paid: o.status === 'Completed' || !!o.is_paid,
-      }));
+      const remoteOrders = batch.map((o) => ({
+      id: o.id,
+      order_id: o.order_number,
+      customer_name: o.customer_name,
+      status: o.status,
+      amount: o.amount,
+      payment_method: o.payment_method,
+      cashier_id: o.cashier_id,
+      cashier_name: o.cashier_name,
+      created_by: o.cashier_id,
+      last_modified_by: o.cashier_id,
+      last_modified_at: now,
+      created_at: o.created_at,
+      synced_at: now,
+      customer_id: o.customer_id ?? null,
+      cash_tendered: o.cash_tendered ?? 0,
+      change_amount: o.change_amount ?? 0,
+      is_paid: o.status === 'Completed' || !!o.is_paid,
+      order_type: o.order_type ?? 'Take-Out', // NEW
+    }));
 
       // Map of local order ID to remote order ID for item syncing
       const localToRemoteOrderId = new Map<string, string>();
@@ -108,20 +109,21 @@ async function doRunSync(): Promise<RunSyncResult> {
             const { data: updatedOrder, error: updateError } = await supabase
               .from('orders')
               .update({
-                customer_name: order.customer_name,
-                status: order.status,
-                amount: order.amount,
-                payment_method: order.payment_method,
-                cashier_id: order.cashier_id,
-                cashier_name: order.cashier_name,
-                last_modified_by: order.last_modified_by,
-                last_modified_at: order.last_modified_at,
-                synced_at: order.synced_at,
-                customer_id: order.customer_id,
-                cash_tendered: order.cash_tendered,
-                change_amount: order.change_amount,
-                is_paid: order.is_paid,
-              })
+              customer_name: order.customer_name,
+              status: order.status,
+              amount: order.amount,
+              payment_method: order.payment_method,
+              cashier_id: order.cashier_id,
+              cashier_name: order.cashier_name,
+              last_modified_by: order.last_modified_by,
+              last_modified_at: order.last_modified_at,
+              synced_at: order.synced_at,
+              customer_id: order.customer_id,
+              cash_tendered: order.cash_tendered,
+              change_amount: order.change_amount,
+              is_paid: order.is_paid,
+              order_type: order.order_type, // NEW
+            })
               .eq('id', order.id)
               .select();
 
@@ -168,18 +170,19 @@ async function doRunSync(): Promise<RunSyncResult> {
       // Now sync order items since parent orders exist
       if (itemRows.length > 0) {
         const remoteItems = itemRows.map((it) => ({
-          id: it.id,
-          order_id: localToRemoteOrderId.get(it.order_id) || it.order_id,
-          product_id: it.product_id,
-          name: it.name,
-          size: it.size,
-          temperature: it.temperature,
-          quantity: it.quantity,
-          unit_price: it.unit_price,
-          subtotal: it.subtotal,
-          is_redemption: !!it.is_redemption,
-          redeemed_discount: it.redeemed_discount ?? 0,
-        }));
+        id: it.id,
+        order_id: localToRemoteOrderId.get(it.order_id) || it.order_id,
+        product_id: it.product_id,
+        name: it.name,
+        size: it.size,
+        temperature: it.temperature,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        subtotal: it.subtotal,
+        is_redemption: !!it.is_redemption,
+        redeemed_discount: it.redeemed_discount ?? 0,
+        uses_packaging: !!it.uses_packaging, // NEW
+      }));
 
         // Try upsert first, fallback to individual if needed
         const { error: itemsError } = await supabase
@@ -319,24 +322,25 @@ export async function syncOrderImmediately(
   try {
     const now = new Date().toISOString();
     const remoteOrder = {
-      id: order.id,
-      order_id: order.order_number,
-      customer_name: order.customer_name,
-      status: order.status,
-      amount: order.amount,
-      payment_method: order.payment_method,
-      cashier_id: order.cashier_id,
-      cashier_name: order.cashier_name,
-      created_by: order.cashier_id,
-      last_modified_by: order.cashier_id,
-      last_modified_at: now,
-      created_at: order.created_at,
-      synced_at: now,
-      customer_id: order.customer_id ?? null,
-      cash_tendered: order.cash_tendered ?? 0,
-      change_amount: order.change_amount ?? 0,
-      is_paid: order.status === 'Completed' || !!order.is_paid,
-    };
+    id: order.id,
+    order_id: order.order_number,
+    customer_name: order.customer_name,
+    status: order.status,
+    amount: order.amount,
+    payment_method: order.payment_method,
+    cashier_id: order.cashier_id,
+    cashier_name: order.cashier_name,
+    created_by: order.cashier_id,
+    last_modified_by: order.cashier_id,
+    last_modified_at: now,
+    created_at: order.created_at,
+    synced_at: now,
+    customer_id: order.customer_id ?? null,
+    cash_tendered: order.cash_tendered ?? 0,
+    change_amount: order.change_amount ?? 0,
+    is_paid: order.status === 'Completed' || !!order.is_paid,
+    order_type: order.order_type ?? 'Take-Out', // NEW
+  };
 
     const { data: existingOrder, error: checkError } = await supabase
       .from('orders')
@@ -362,6 +366,7 @@ export async function syncOrderImmediately(
           cash_tendered: remoteOrder.cash_tendered,
           change_amount: remoteOrder.change_amount,
           is_paid: remoteOrder.is_paid,
+          order_type: remoteOrder.order_type, // NEW
         })
         .eq('id', remoteOrder.id)
         .select();
@@ -389,6 +394,7 @@ export async function syncOrderImmediately(
         subtotal: it.subtotal,
         is_redemption: !!it.is_redemption,
         redeemed_discount: it.redeemed_discount ?? 0,
+        uses_packaging: !!it.uses_packaging, // NEW
       }));
       const { error: itemsError } = await supabase
         .from('order_items')
