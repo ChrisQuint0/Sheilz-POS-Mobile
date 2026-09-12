@@ -57,7 +57,8 @@
           "savePhotosPermission": "Allow Sheilz POS to save ticket receipts to your photos.",
           "isAccessMediaLocationEnabled": false
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "eas": {
