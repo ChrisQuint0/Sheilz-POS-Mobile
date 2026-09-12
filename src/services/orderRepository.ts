@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 import { getDB } from '../lib/db';
-import type { Order, OrderStatus, CartItem } from '../store/usePOSStore';
+import type { Order, OrderStatus, CartItem, OrderType } from '../store/usePOSStore';
 
 export async function createOrder(
   cart: CartItem[],
@@ -15,20 +15,19 @@ export async function createOrder(
   redeemedPointsRequired?: number | null,
   cashTendered: number = 0,
   changeAmount: number = 0,
-  id: string = Crypto.randomUUID(), // NEW — lets caller pre-generate (PayMongo flow)
-  isPaid: boolean = false,           // NEW
+  id: string = Crypto.randomUUID(),
+  isPaid: boolean = false,
+  orderType: 'Dine-In' | 'Take-Out' = 'Take-Out', // NEW — trailing, matches usePOSStore call
 ): Promise<Order> {
   const db = await getDB();
-  // id is now a parameter, not generated here — the line below is removed:
-  // const id = Crypto.randomUUID();
   const totalAmount = cart.reduce((sum, c) => sum + c.unitPrice * c.quantity, 0);
   const timestamp = new Date().toISOString();
   const status: OrderStatus = 'Current';
 
   await db.withExclusiveTransactionAsync(async (txn) => {
     await txn.runAsync(
-      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status, customer_id, is_redemption, redeemed_reward_id, redeemed_points_required, cash_tendered, change_amount, is_paid)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO orders (id, order_number, customer_name, status, amount, payment_method, cashier_id, cashier_name, created_at, sync_status, customer_id, is_redemption, redeemed_reward_id, redeemed_points_required, cash_tendered, change_amount, is_paid, order_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         orderNumber,
@@ -46,14 +45,15 @@ export async function createOrder(
         cashTendered,
         changeAmount,
         isPaid ? 1 : 0,
+        orderType, // NEW
       ]
     );
 
     for (const c of cart) {
       const itemId = Crypto.randomUUID();
       await txn.runAsync(
-        `INSERT INTO order_items (id, order_id, product_id, name, size, temperature, quantity, unit_price, subtotal, is_redemption, redeemed_discount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO order_items (id, order_id, product_id, name, size, temperature, quantity, unit_price, subtotal, is_redemption, redeemed_discount, uses_packaging)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           itemId,
           id,
@@ -66,6 +66,7 @@ export async function createOrder(
           c.unitPrice * c.quantity,
           c.isRedemption ? 1 : 0,
           c.redeemedDiscount ?? 0,
+          c.usesPackaging === false ? 0 : 1, // NEW — defaults to 1 (packaging) if undefined
         ]
       );
     }
@@ -82,10 +83,10 @@ export async function createOrder(
     timestamp,
     cashTendered,
     changeAmount,
-    isPaid,  // NEW — see Order interface addition below
+    isPaid,
+    orderType, // NEW
   };
 }
-
 // Called from usePOSStore.updateOrderStatus when transitioning an order to
 // 'Completed', to determine whether the redemption-finalization path
 // (immediate sync + loyalty_log write) is needed, and with which frozen
@@ -165,6 +166,7 @@ function hydrateOrder(o: any, itemRows: any[]): Order {
       quantity: i.quantity,
       isRedemption: !!i.is_redemption,
       redeemedDiscount: i.redeemed_discount || undefined,
+      usesPackaging: !!i.uses_packaging, // NEW
     })),
     totalAmount: o.amount,
     paymentMethod: o.payment_method,
@@ -173,6 +175,7 @@ function hydrateOrder(o: any, itemRows: any[]): Order {
     timestamp: o.created_at,
     cashTendered: o.cash_tendered ?? 0,
     changeAmount: o.change_amount ?? 0,
-    isPaid: !!o.is_paid,  // NEW
+    isPaid: !!o.is_paid,
+    orderType: o.order_type ?? 'Take-Out', // NEW
   };
 }

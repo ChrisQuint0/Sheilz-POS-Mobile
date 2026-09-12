@@ -57,10 +57,13 @@ export default function ProductOptionModal({
   item,
   onClose,
 }: ProductOptionModalProps) {
-  const { addToCart, showToast } = usePOSStore();
+  const { addToCart, showToast } = usePOSStore(); // ADD THIS BACK
   const insets = useSafeAreaInsets();
   const [selectedSizeId, setSelectedSizeId] = useState<string | null>(null);
   const [selectedTempId, setSelectedTempId] = useState<string | null>(null);
+  const [itemOrderType, setItemOrderType] = useState<"Dine-In" | "Take-Out">(
+    "Dine-In",
+  );
   const [quantity, setQuantity] = useState(1);
 
   const slideAnim = useRef(new Animated.Value(500)).current;
@@ -86,11 +89,13 @@ export default function ProductOptionModal({
       return sizeMatches && tempMatches;
     }) ?? null;
 
+  // in the modal-open useEffect — was: setItemOrderType(orderType ?? 'Take-Out');
   useEffect(() => {
     if (visible && item) {
       const sizes = getUniqueSizes(item.variants ?? []);
       setSelectedSizeId(sizes.length === 1 ? sizes[0].id : null);
       setQuantity(1);
+      setItemOrderType("Dine-In"); // NEW — always defaults to Dine-In
 
       slideAnim.setValue(500);
       Animated.spring(slideAnim, {
@@ -140,6 +145,7 @@ export default function ProductOptionModal({
         },
         selectedVariant.price,
         quantity,
+        itemOrderType === "Take-Out", // NEW — usesPackaging
       );
       showToast(`Added ${quantity}x ${item.name} to order`);
       handleClose();
@@ -248,6 +254,63 @@ export default function ProductOptionModal({
               </View>
             </View>
           )}
+
+          {/* Dine-In / Take-Out  */}
+          <View style={styles.section}>
+            <AppText style={styles.sectionTitle}>Dine-In or Take-Out?</AppText>
+            <View style={styles.optionsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.bigToggleBtn,
+                  itemOrderType === "Dine-In" && styles.bigToggleBtnActive,
+                ]}
+                onPress={() => setItemOrderType("Dine-In")}
+              >
+                <Ionicons
+                  name="restaurant-outline"
+                  size={24}
+                  color={
+                    itemOrderType === "Dine-In"
+                      ? COLORS.surface
+                      : COLORS.espresso
+                  }
+                />
+                <AppText
+                  style={[
+                    styles.bigToggleText,
+                    itemOrderType === "Dine-In" && styles.bigToggleTextActive,
+                  ]}
+                >
+                  Dine-In
+                </AppText>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.bigToggleBtn,
+                  itemOrderType === "Take-Out" && styles.bigToggleBtnActive,
+                ]}
+                onPress={() => setItemOrderType("Take-Out")}
+              >
+                <Ionicons
+                  name="bag-outline"
+                  size={24}
+                  color={
+                    itemOrderType === "Take-Out"
+                      ? COLORS.surface
+                      : COLORS.espresso
+                  }
+                />
+                <AppText
+                  style={[
+                    styles.bigToggleText,
+                    itemOrderType === "Take-Out" && styles.bigToggleTextActive,
+                  ]}
+                >
+                  Take-Out
+                </AppText>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           {/* Restricted-temperature feedback */}
           {showTempHint && (
@@ -426,5 +489,29 @@ const styles = StyleSheet.create({
     color: COLORS.surface,
     fontWeight: TYPOGRAPHY.weights.bold,
     fontSize: TYPOGRAPHY.sizes.md,
+  },
+  bigToggleBtn: {
+    flex: 1,
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.stone200,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.stone100,
+  },
+  bigToggleBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  bigToggleText: {
+    fontSize: TYPOGRAPHY.sizes.md,
+    fontWeight: TYPOGRAPHY.weights.bold,
+    color: COLORS.espresso,
+  },
+  bigToggleTextActive: {
+    color: COLORS.surface,
   },
 });

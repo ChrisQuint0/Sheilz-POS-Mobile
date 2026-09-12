@@ -80,9 +80,12 @@ export interface CartItem {
   isRedemption?: boolean;
   redeemedDiscount?: number;
   preRedemptionUnitPrice?: number;
+  usesPackaging?: boolean; // NEW — per-line Dine-In/Take-Out packaging choice
 }
 
 export const PWD_SENIOR_DISCOUNT_RATE = 0.2;
+
+export type OrderType = 'Dine-In' | 'Take-Out';
 
 export function getDiscountedUnitPrice(item: CartItem, pwdSeniorDiscountEnabled: boolean): number {
   if (!pwdSeniorDiscountEnabled || item.isRedemption) {
@@ -114,6 +117,7 @@ export interface Order {
   cashTendered?: number;
   changeAmount?: number;
   isPaid?: boolean;  // NEW
+  orderType?: OrderType; // NEW
 }
 
 export interface AuthProfile {
@@ -157,7 +161,7 @@ interface POSState {
 
   // Cart
   cart: CartItem[];
-  addToCart: (item: MenuItem, options?: CartItemOptions, unitPrice?: number, quantity?: number) => void;
+  addToCart: (item: MenuItem, options?: CartItemOptions, unitPrice?: number, quantity?: number, usesPackaging?: boolean) => void;
   removeFromCart: (cartItemId: string) => void;
   decrementCartItem: (cartItemId: string) => void;
   clearCart: () => void;
@@ -279,11 +283,13 @@ export const usePOSStore = create<POSState>((set, get) => ({
   })),
 
   cart: [],
-  addToCart: (item, options, unitPrice, quantity = 1) => set((state) => {
+  addToCart: (item, options, unitPrice, quantity = 1, usesPackaging = true) => set((state) => {
     // Generate unique ID based on options. Redemption items get a distinct
     // suffix so a paid and a free line of the same product (same size/temp)
     // don't collapse into one cart row.
-    const optionStr = options ? `${options.size || ''}-${options.temp || ''}-${options.addon ? 'addon' : ''}` : 'no-options';
+    const optionStr = options
+      ? `${options.size || ''}-${options.temp || ''}-${options.addon ? 'addon' : ''}-${usesPackaging ? 'pkg' : 'nopkg'}`
+      : `no-options-${usesPackaging ? 'pkg' : 'nopkg'}`;
     const cartItemId = `${item.id}-${optionStr}`;
     const price = unitPrice !== undefined ? unitPrice : item.price;
 
@@ -295,7 +301,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
         ),
       };
     }
-    return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity }] };
+    return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity, usesPackaging }] };
   }),
 
 
@@ -328,9 +334,10 @@ export const usePOSStore = create<POSState>((set, get) => ({
     return { cart, ...(cart.length === 0 ? { pwdSeniorDiscountEnabled: false } : {}) };
   }),
 
-  clearCart: () => set({ cart: [], activeCustomer: null, pwdSeniorDiscountEnabled: false }),
+  clearCart: () => set({ cart: [], activeCustomer: null, pwdSeniorDiscountEnabled: false}),
   pwdSeniorDiscountEnabled: false,
   setPwdSeniorDiscountEnabled: (enabled) => set({ pwdSeniorDiscountEnabled: enabled }),
+
 
   orderSequence: 1,
   lastOrderDate: getTodayString(),
@@ -421,55 +428,56 @@ export const usePOSStore = create<POSState>((set, get) => ({
     set({ orders });
   },
   placeOrder: async (paymentMethod, orderNumber, customerName, paymentDetail) => {
-    const state = get();
-    const hasRedemptionLine = state.cart.some((c) => c.isRedemption === true);
-    if (hasRedemptionLine && (!state.activeCustomer || !state.activeReward)) {
-      throw new Error('A redeemed item requires an attached customer and an active reward.');
-    }
+  const state = get();
+  const hasRedemptionLine = state.cart.some((c) => c.isRedemption === true);
+  if (hasRedemptionLine && (!state.activeCustomer || !state.activeReward)) {
+    throw new Error('A redeemed item requires an attached customer and an active reward.');
+  }
 
-    const resolvedCustomerName = state.activeCustomer
-      ? [state.activeCustomer.first_name, state.activeCustomer.last_name]
-          .filter(Boolean)
-          .join(' ') || undefined
-      : customerName;
+  const resolvedCustomerName = state.activeCustomer
+    ? [state.activeCustomer.first_name, state.activeCustomer.last_name]
+        .filter(Boolean)
+        .join(' ') || undefined
+    : customerName;
 
-    // Orders are always created 'Current' (an open ticket) — this is not
-    // the moment redemption finalizes. Supabase's orders_status_check
-    // rejects 'Current' remotely, and the earn-side trigger itself only
-    // fires on transition to 'Completed' — so the redemption's immediate
-    // sync + loyalty_log write happens in updateOrderStatus instead, once
-    // the order actually reaches 'Completed'. Here we only freeze which
-    // reward/points cost applied, so a later change to the active reward
-    // can't retroactively affect this order.
-    const orderCart = state.cart.map((item) => ({
-      ...item,
-      unitPrice: getDiscountedUnitPrice(item, state.pwdSeniorDiscountEnabled),
-    }));
+  const orderCart = state.cart.map((item) => ({
+    ...item,
+    unitPrice: getDiscountedUnitPrice(item, state.pwdSeniorDiscountEnabled),
+  }));
 
-      const newOrder = await createOrder(
-      orderCart,
-      orderNumber,
-      paymentMethod,
-      state.userId,
-      state.cashierName,
-      resolvedCustomerName,
-      state.activeCustomer?.id ?? null,
-      hasRedemptionLine,
-      hasRedemptionLine ? state.activeReward!.id : null,
-      hasRedemptionLine ? state.activeReward!.points_required : null,
-      paymentDetail?.cashTendered ?? 0,
-      paymentDetail?.changeAmount ?? 0,
-      paymentDetail?.id,       // NEW — undefined falls through to createOrder's own default
-      paymentDetail?.isPaid ?? false,  // NEW
-    );
+  // Order-level order_type is derived, not chosen directly — "any-dine-in":
+  // if any line item was marked dine-in (usesPackaging === false), the whole
+  // order is tagged Dine-In for reporting purposes, even if other lines on
+  // the same order were take-out.
+  const derivedOrderType: OrderType = orderCart.some((c) => c.usesPackaging === false)
+    ? 'Dine-In'
+    : 'Take-Out';
 
-    set((s) => ({
-      orders: [newOrder, ...s.orders],
-      cart: [],
-      activeCustomer: null,
-      pwdSeniorDiscountEnabled: false,
-    }));
-  },
+  const newOrder = await createOrder(
+    orderCart,
+    orderNumber,
+    paymentMethod,
+    state.userId,
+    state.cashierName,
+    resolvedCustomerName,
+    state.activeCustomer?.id ?? null,
+    hasRedemptionLine,
+    hasRedemptionLine ? state.activeReward!.id : null,
+    hasRedemptionLine ? state.activeReward!.points_required : null,
+    paymentDetail?.cashTendered ?? 0,
+    paymentDetail?.changeAmount ?? 0,
+    paymentDetail?.id,
+    paymentDetail?.isPaid ?? false,
+    derivedOrderType, // NEW — replaces state.orderType ?? 'Take-Out'
+  );
+
+  set((s) => ({
+    orders: [newOrder, ...s.orders],
+    cart: [],
+    activeCustomer: null,
+    pwdSeniorDiscountEnabled: false,
+  }));
+},
   updateOrderStatus: async (orderId, status) => {
     const meta = await getOrderRedemptionMeta(orderId);
     if (status === 'Completed' && meta?.hasRedemption) {

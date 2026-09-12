@@ -9,6 +9,36 @@ type Migration = {
 
 const MIGRATIONS: Migration[] = [
   {
+  version: 11,
+  // Dine-In / Take-Out differentiation (2026-09-04). orders.order_type is
+  // decided once at cart-open time (see usePOSStore.orderType) and is used
+  // for reporting/analytics only. order_items.uses_packaging is the actual
+  // deduction-relevant flag, set per line item in ProductOptionModal
+  // (defaults from orderType but is independently editable per item — e.g.
+  // "dine-in but still wants a to-go cup"). The Supabase-side
+  // deduct_inventory_for_order() RPC reads uses_packaging per order_item
+  // against product_recipes.is_packaging, NOT orders.order_type — see
+  // handoff.md for the full rationale.
+  //
+  // Uses the conditional-add pattern per this file's documented history of
+  // version collisions (v6/v7, v8/v9) — safe no-op if either column is
+  // somehow already present.
+  run: async (txn) => {
+    const orderColumns = await txn.getAllAsync(`PRAGMA table_info('orders')`);
+    const itemColumns = await txn.getAllAsync(`PRAGMA table_info('order_items')`);
+    if (!orderColumns.some((c: any) => c.name === 'order_type')) {
+      await txn.execAsync(
+        `ALTER TABLE orders ADD COLUMN order_type TEXT NOT NULL DEFAULT 'Take-Out';`,
+      );
+    }
+    if (!itemColumns.some((c: any) => c.name === 'uses_packaging')) {
+      await txn.execAsync(
+        `ALTER TABLE order_items ADD COLUMN uses_packaging INTEGER NOT NULL DEFAULT 1;`,
+      );
+    }
+  },
+},
+  {
     version: 10,
     // PayMongo online payments support. Adds orders.is_paid — a local
     // mirror of the Supabase column of the same name — so createOrder/
