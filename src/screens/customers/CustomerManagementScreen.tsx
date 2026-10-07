@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   StyleSheet,
@@ -162,6 +162,8 @@ export default function CustomerManagementScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [manualCardId, setManualCardId] = useState("");
   const [hasScannedOnce, setHasScannedOnce] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const scanLock = useRef(false);
   useFocusEffect(
     useCallback(() => {
       if (useSyncStore.getState().isNetworkConnected) {
@@ -169,6 +171,8 @@ export default function CustomerManagementScreen() {
           console.warn("Background customer sync on screen focus failed:", err);
         });
       }
+
+      return () => setIsCameraActive(false);
     }, []),
   );
 
@@ -190,21 +194,26 @@ export default function CustomerManagementScreen() {
 
   const handleBarcodeScanned = useCallback(
     (result: BarcodeScanningResult) => {
-      if (hasScannedOnce) return; // debounce until the drawer closes/resets
+      if (scanLock.current) return;
+      scanLock.current = true;
       setHasScannedOnce(true);
+      setIsCameraActive(false);
       lookupByCardNumber(result.data);
     },
-    [hasScannedOnce, lookupByCardNumber],
+    [lookupByCardNumber],
   );
 
   const handleManualSubmit = () => {
     if (!manualCardId.trim()) return;
+    scanLock.current = true;
+    setIsCameraActive(false);
     lookupByCardNumber(manualCardId.trim());
   };
 
   const handleCloseDrawer = () => {
     closeDrawer();
     reset();
+    scanLock.current = false;
     setHasScannedOnce(false);
     setManualCardId("");
   };
@@ -223,10 +232,12 @@ export default function CustomerManagementScreen() {
   };
   const handleScanButtonPress = async () => {
     if (!permission?.granted) {
-      await requestPermission();
-      return;
+      const result = await requestPermission();
+      if (!result.granted) return;
     }
+    scanLock.current = false;
     setHasScannedOnce(false);
+    setIsCameraActive(true);
   };
 
   return (
@@ -250,10 +261,23 @@ export default function CustomerManagementScreen() {
         <View style={styles.content}>
           <View style={styles.scannerCard}>
             <View style={styles.cameraBox}>
-              {!permission?.granted ? (
+              {permission?.granted && isCameraActive ? (
+                <>
+                  <CameraView
+                    style={StyleSheet.absoluteFillObject}
+                    facing="back"
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                    onBarcodeScanned={handleBarcodeScanned}
+                  />
+                  <ScannerFrame />
+                  <AppText style={styles.cameraHint}>
+                    Point the camera at the customer's digital card
+                  </AppText>
+                </>
+              ) : (
                 <TouchableOpacity
                   style={styles.permissionPrompt}
-                  onPress={requestPermission}
+                  onPress={handleScanButtonPress}
                 >
                   <Ionicons
                     name="camera-outline"
@@ -261,24 +285,11 @@ export default function CustomerManagementScreen() {
                     color={COLORS.textLight}
                   />
                   <AppText style={styles.permissionText}>
-                    Tap to allow camera access for QR scanning
+                    {permission?.granted
+                      ? "Tap to start QR scanning"
+                      : "Tap to allow camera access for QR scanning"}
                   </AppText>
                 </TouchableOpacity>
-              ) : (
-                <>
-                  <CameraView
-                    style={StyleSheet.absoluteFillObject}
-                    facing="back"
-                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                    onBarcodeScanned={
-                      hasScannedOnce ? undefined : handleBarcodeScanned
-                    }
-                  />
-                  <ScannerFrame />
-                  <AppText style={styles.cameraHint}>
-                    Point the camera at the customer's digital card
-                  </AppText>
-                </>
               )}
             </View>
 
