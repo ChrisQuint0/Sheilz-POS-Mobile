@@ -115,6 +115,9 @@ export default function TicketCard({ order, width }: TicketCardProps) {
             <AppText style={styles.paymentMethod}>
               Paid via: {order.paymentMethod}
             </AppText>
+            <AppText style={styles.orderType}>
+              {order.orderType ?? "Take-Out"}
+            </AppText>
           </View>
           <View
             style={[
@@ -171,6 +174,31 @@ export default function TicketCard({ order, width }: TicketCardProps) {
             </View>
           ))}
         </ScrollView>
+
+        <View style={styles.totals}>
+          <View style={styles.totalRow}>
+            <AppText style={styles.totalLabel}>Total</AppText>
+            <AppText style={styles.totalAmount}>
+              ₱{order.totalAmount.toFixed(2)}
+            </AppText>
+          </View>
+          {order.paymentMethod === "Cash" && (
+            <>
+              <View style={styles.paymentRow}>
+                <AppText style={styles.paymentLabel}>Money Tendered</AppText>
+                <AppText style={styles.paymentValue}>
+                  ₱{(order.cashTendered ?? 0).toFixed(2)}
+                </AppText>
+              </View>
+              <View style={styles.paymentRow}>
+                <AppText style={styles.paymentLabel}>Change</AppText>
+                <AppText style={styles.paymentValue}>
+                  ₱{(order.changeAmount ?? 0).toFixed(2)}
+                </AppText>
+              </View>
+            </>
+          )}
+        </View>
 
         <View style={styles.receiptActions}>
           <TouchableOpacity style={styles.iconBtn} onPress={handlePrint}>
@@ -282,6 +310,11 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     marginTop: 2,
   },
+  orderType: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: COLORS.textLight,
+    marginTop: 2,
+  },
   statusBadge: {
     paddingHorizontal: SPACING.md,
     paddingVertical: 6,
@@ -339,6 +372,42 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.sm,
     color: COLORS.textLight,
     marginTop: 4,
+  },
+  totals: {
+    borderTopWidth: 1,
+    borderTopColor: COLORS.stone200,
+    paddingTop: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  totalRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: SPACING.xs,
+  },
+  totalLabel: {
+    fontSize: TYPOGRAPHY.sizes.md,
+    fontWeight: TYPOGRAPHY.weights.bold,
+    color: COLORS.espresso,
+  },
+  totalAmount: {
+    fontSize: TYPOGRAPHY.sizes.lg,
+    fontWeight: TYPOGRAPHY.weights.bold,
+    color: COLORS.espresso,
+  },
+  paymentRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 2,
+  },
+  paymentLabel: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    color: COLORS.textLight,
+  },
+  paymentValue: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    color: COLORS.text,
   },
   actions: {
     flexDirection: "row",
