@@ -10,6 +10,7 @@ import {
   BORDER_RADIUS,
 } from "../../constants/theme";
 import AppText from "../ui/AppText";
+import { getProductStockState } from "../../services/stockStatus";
 
 interface ProductCardProps {
   item: MenuItem;
@@ -21,9 +22,13 @@ export default function ProductCard({ item, onSelect }: ProductCardProps) {
   const quantityInCart = cart
     .filter((c) => c.item.id === item.id)
     .reduce((sum, c) => sum + c.quantity, 0);
+  const stockState = getProductStockState(item.variants);
 
   return (
-    <TouchableOpacity style={styles.card} onPress={() => onSelect(item)}>
+    <TouchableOpacity
+      style={[styles.card, stockState === "out" && styles.cardOut]}
+      onPress={() => onSelect(item)}
+    >
       <View style={styles.imageContainer}>
         <ExpoImage
           source={item.image ? { uri: item.image } : undefined}
@@ -41,6 +46,14 @@ export default function ProductCard({ item, onSelect }: ProductCardProps) {
         <AppText style={styles.cardTitle}>{item.name}</AppText>
         <AppText style={styles.cardCategory}>{item.category}</AppText>
         <AppText style={styles.cardPrice}>₱{item.price.toFixed(2)}</AppText>
+        {stockState === "low" && (
+          <View style={styles.lowPill}>
+            <AppText style={styles.lowPillText}>Low</AppText>
+          </View>
+        )}
+        {stockState === "out" && (
+          <AppText style={styles.outLabel}>Out of stock</AppText>
+        )}
       </View>
       <View style={styles.addButton}>
         <Ionicons name="add" size={20} color={COLORS.surface} />
@@ -100,6 +113,27 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.full,
     justifyContent: "center",
     alignItems: "center",
+  },
+  cardOut: {
+    opacity: 0.6,
+  },
+  lowPill: {
+    alignSelf: "flex-start",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
+    marginTop: SPACING.xs,
+  },
+  lowPillText: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: COLORS.textLight,
+  },
+  outLabel: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    fontWeight: TYPOGRAPHY.weights.semibold,
+    color: COLORS.textLight,
+    marginTop: SPACING.xs,
   },
   imageContainer: {
     position: "relative",

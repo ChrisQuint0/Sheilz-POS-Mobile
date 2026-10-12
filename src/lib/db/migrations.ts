@@ -1,4 +1,4 @@
-import { type SQLiteDatabase } from 'expo-sqlite';
+import { type SQLiteDatabase } from "expo-sqlite";
 
 type Migration = {
   version: number;
@@ -9,35 +9,59 @@ type Migration = {
 
 const MIGRATIONS: Migration[] = [
   {
-  version: 11,
-  // Dine-In / Take-Out differentiation (2026-09-04). orders.order_type is
-  // decided once at cart-open time (see usePOSStore.orderType) and is used
-  // for reporting/analytics only. order_items.uses_packaging is the actual
-  // deduction-relevant flag, set per line item in ProductOptionModal
-  // (defaults from orderType but is independently editable per item — e.g.
-  // "dine-in but still wants a to-go cup"). The Supabase-side
-  // deduct_inventory_for_order() RPC reads uses_packaging per order_item
-  // against product_recipes.is_packaging, NOT orders.order_type — see
-  // handoff.md for the full rationale.
-  //
-  // Uses the conditional-add pattern per this file's documented history of
-  // version collisions (v6/v7, v8/v9) — safe no-op if either column is
-  // somehow already present.
-  run: async (txn) => {
-    const orderColumns = await txn.getAllAsync(`PRAGMA table_info('orders')`);
-    const itemColumns = await txn.getAllAsync(`PRAGMA table_info('order_items')`);
-    if (!orderColumns.some((c: any) => c.name === 'order_type')) {
-      await txn.execAsync(
-        `ALTER TABLE orders ADD COLUMN order_type TEXT NOT NULL DEFAULT 'Take-Out';`,
+    version: 12,
+    // Out-of-stock soft warning (v1). Caches per-variant servings-left from
+    // the Supabase `variant_availability` view. NULL = no recipe / unknown,
+    // which the POS treats as unlimited (never warns). Uses the conditional-
+    // add pattern per this file's history of version collisions.
+    run: async (txn) => {
+      const columns = await txn.getAllAsync(
+        `PRAGMA table_info('product_variants')`,
       );
-    }
-    if (!itemColumns.some((c: any) => c.name === 'uses_packaging')) {
-      await txn.execAsync(
-        `ALTER TABLE order_items ADD COLUMN uses_packaging INTEGER NOT NULL DEFAULT 1;`,
-      );
-    }
+      if (!columns.some((c: any) => c.name === "servings_dine_in")) {
+        await txn.execAsync(
+          `ALTER TABLE product_variants ADD COLUMN servings_dine_in INTEGER;`,
+        );
+      }
+      if (!columns.some((c: any) => c.name === "servings_take_out")) {
+        await txn.execAsync(
+          `ALTER TABLE product_variants ADD COLUMN servings_take_out INTEGER;`,
+        );
+      }
+    },
   },
-},
+  {
+    version: 11,
+    // Dine-In / Take-Out differentiation (2026-09-04). orders.order_type is
+    // decided once at cart-open time (see usePOSStore.orderType) and is used
+    // for reporting/analytics only. order_items.uses_packaging is the actual
+    // deduction-relevant flag, set per line item in ProductOptionModal
+    // (defaults from orderType but is independently editable per item — e.g.
+    // "dine-in but still wants a to-go cup"). The Supabase-side
+    // deduct_inventory_for_order() RPC reads uses_packaging per order_item
+    // against product_recipes.is_packaging, NOT orders.order_type — see
+    // handoff.md for the full rationale.
+    //
+    // Uses the conditional-add pattern per this file's documented history of
+    // version collisions (v6/v7, v8/v9) — safe no-op if either column is
+    // somehow already present.
+    run: async (txn) => {
+      const orderColumns = await txn.getAllAsync(`PRAGMA table_info('orders')`);
+      const itemColumns = await txn.getAllAsync(
+        `PRAGMA table_info('order_items')`,
+      );
+      if (!orderColumns.some((c: any) => c.name === "order_type")) {
+        await txn.execAsync(
+          `ALTER TABLE orders ADD COLUMN order_type TEXT NOT NULL DEFAULT 'Take-Out';`,
+        );
+      }
+      if (!itemColumns.some((c: any) => c.name === "uses_packaging")) {
+        await txn.execAsync(
+          `ALTER TABLE order_items ADD COLUMN uses_packaging INTEGER NOT NULL DEFAULT 1;`,
+        );
+      }
+    },
+  },
   {
     version: 10,
     // PayMongo online payments support. Adds orders.is_paid — a local
@@ -55,7 +79,7 @@ const MIGRATIONS: Migration[] = [
     // if is_paid is somehow already present.
     run: async (txn) => {
       const columns = await txn.getAllAsync(`PRAGMA table_info('orders')`);
-      if (!columns.some((c: any) => c.name === 'is_paid')) {
+      if (!columns.some((c: any) => c.name === "is_paid")) {
         await txn.execAsync(
           `ALTER TABLE orders ADD COLUMN is_paid INTEGER NOT NULL DEFAULT 0;`,
         );
@@ -69,20 +93,24 @@ const MIGRATIONS: Migration[] = [
     // devices cannot skip it due to the historical version collision.
     run: async (txn) => {
       const columns = await txn.getAllAsync(`PRAGMA table_info('orders')`);
-      if (!columns.some((c: any) => c.name === 'redeemed_reward_id')) {
-        await txn.execAsync(`ALTER TABLE orders ADD COLUMN redeemed_reward_id INTEGER;`);
+      if (!columns.some((c: any) => c.name === "redeemed_reward_id")) {
+        await txn.execAsync(
+          `ALTER TABLE orders ADD COLUMN redeemed_reward_id INTEGER;`,
+        );
       }
-      if (!columns.some((c: any) => c.name === 'redeemed_points_required')) {
-        await txn.execAsync(`ALTER TABLE orders ADD COLUMN redeemed_points_required INTEGER;`);
+      if (!columns.some((c: any) => c.name === "redeemed_points_required")) {
+        await txn.execAsync(
+          `ALTER TABLE orders ADD COLUMN redeemed_points_required INTEGER;`,
+        );
       }
       // Devices that ran the historical redemption v7 are already at
       // user_version 7, so they skipped the cash v6/v7 repair entirely.
-      if (!columns.some((c: any) => c.name === 'cash_tendered')) {
+      if (!columns.some((c: any) => c.name === "cash_tendered")) {
         await txn.execAsync(
           `ALTER TABLE orders ADD COLUMN cash_tendered REAL NOT NULL DEFAULT 0;`,
         );
       }
-      if (!columns.some((c: any) => c.name === 'change_amount')) {
+      if (!columns.some((c: any) => c.name === "change_amount")) {
         await txn.execAsync(
           `ALTER TABLE orders ADD COLUMN change_amount REAL NOT NULL DEFAULT 0;`,
         );
@@ -95,23 +123,33 @@ const MIGRATIONS: Migration[] = [
     // shipped as v6. Use conditional adds for installs that already received
     // the old redemption migrations.
     run: async (txn) => {
-      const loyaltyColumns = await txn.getAllAsync(`PRAGMA table_info('loyalty_program')`);
-      const itemColumns = await txn.getAllAsync(`PRAGMA table_info('order_items')`);
-      if (!loyaltyColumns.some((c: any) => c.name === 'reward_type')) {
-        await txn.execAsync(`ALTER TABLE loyalty_program ADD COLUMN reward_type TEXT;`);
+      const loyaltyColumns = await txn.getAllAsync(
+        `PRAGMA table_info('loyalty_program')`,
+      );
+      const itemColumns = await txn.getAllAsync(
+        `PRAGMA table_info('order_items')`,
+      );
+      if (!loyaltyColumns.some((c: any) => c.name === "reward_type")) {
+        await txn.execAsync(
+          `ALTER TABLE loyalty_program ADD COLUMN reward_type TEXT;`,
+        );
       }
-      if (!loyaltyColumns.some((c: any) => c.name === 'quantity')) {
-        await txn.execAsync(`ALTER TABLE loyalty_program ADD COLUMN quantity INTEGER;`);
+      if (!loyaltyColumns.some((c: any) => c.name === "quantity")) {
+        await txn.execAsync(
+          `ALTER TABLE loyalty_program ADD COLUMN quantity INTEGER;`,
+        );
       }
-      if (!loyaltyColumns.some((c: any) => c.name === 'discount_amount')) {
-        await txn.execAsync(`ALTER TABLE loyalty_program ADD COLUMN discount_amount REAL;`);
+      if (!loyaltyColumns.some((c: any) => c.name === "discount_amount")) {
+        await txn.execAsync(
+          `ALTER TABLE loyalty_program ADD COLUMN discount_amount REAL;`,
+        );
       }
-      if (!itemColumns.some((c: any) => c.name === 'is_redemption')) {
+      if (!itemColumns.some((c: any) => c.name === "is_redemption")) {
         await txn.execAsync(
           `ALTER TABLE order_items ADD COLUMN is_redemption INTEGER NOT NULL DEFAULT 0;`,
         );
       }
-      if (!itemColumns.some((c: any) => c.name === 'redeemed_discount')) {
+      if (!itemColumns.some((c: any) => c.name === "redeemed_discount")) {
         await txn.execAsync(
           `ALTER TABLE order_items ADD COLUMN redeemed_discount REAL NOT NULL DEFAULT 0;`,
         );
@@ -137,17 +175,17 @@ const MIGRATIONS: Migration[] = [
     // regardless of which path a given device took to get here.
     run: async (txn) => {
       const tableInfo = await txn.getAllAsync(`PRAGMA table_info('orders')`);
-      const hasCash = tableInfo.some((c: any) => c.name === 'cash_tendered');
-      const hasChange = tableInfo.some((c: any) => c.name === 'change_amount');
+      const hasCash = tableInfo.some((c: any) => c.name === "cash_tendered");
+      const hasChange = tableInfo.some((c: any) => c.name === "change_amount");
 
       if (!hasCash) {
         await txn.execAsync(
-          `ALTER TABLE orders ADD COLUMN cash_tendered REAL NOT NULL DEFAULT 0;`
+          `ALTER TABLE orders ADD COLUMN cash_tendered REAL NOT NULL DEFAULT 0;`,
         );
       }
       if (!hasChange) {
         await txn.execAsync(
-          `ALTER TABLE orders ADD COLUMN change_amount REAL NOT NULL DEFAULT 0;`
+          `ALTER TABLE orders ADD COLUMN change_amount REAL NOT NULL DEFAULT 0;`,
         );
       }
     },
@@ -166,12 +204,12 @@ const MIGRATIONS: Migration[] = [
     // repair any device that got stuck on the broken version of this file.
     run: async (txn) => {
       const tableInfo = await txn.getAllAsync(`PRAGMA table_info('orders')`);
-      if (!tableInfo.some((c: any) => c.name === 'cash_tendered')) {
+      if (!tableInfo.some((c: any) => c.name === "cash_tendered")) {
         await txn.execAsync(
           `ALTER TABLE orders ADD COLUMN cash_tendered REAL NOT NULL DEFAULT 0;`,
         );
       }
-      if (!tableInfo.some((c: any) => c.name === 'change_amount')) {
+      if (!tableInfo.some((c: any) => c.name === "change_amount")) {
         await txn.execAsync(
           `ALTER TABLE orders ADD COLUMN change_amount REAL NOT NULL DEFAULT 0;`,
         );
@@ -348,11 +386,13 @@ const MIGRATIONS: Migration[] = [
 ];
 
 export async function migrate(db: SQLiteDatabase): Promise<void> {
-  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const row = await db.getFirstAsync<{ user_version: number }>(
+    "PRAGMA user_version",
+  );
   const currentVersion = row?.user_version ?? 0;
 
   const pending = MIGRATIONS.filter((m) => m.version > currentVersion).sort(
-    (a, b) => a.version - b.version
+    (a, b) => a.version - b.version,
   );
 
   for (const migration of pending) {
@@ -362,7 +402,10 @@ export async function migrate(db: SQLiteDatabase): Promise<void> {
       } else if (migration.sql) {
         await txn.execAsync(migration.sql);
       }
-      await txn.runAsync('INSERT INTO migrations (version) VALUES (?)', migration.version);
+      await txn.runAsync(
+        "INSERT INTO migrations (version) VALUES (?)",
+        migration.version,
+      );
       await txn.execAsync(`PRAGMA user_version = ${migration.version}`);
     });
   }

@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabase';
-import { getDB } from '../lib/db';
-import { replaceCatalog, type CatalogSnapshot } from './catalogRepository';
+import { supabase } from "../lib/supabase";
+import { getDB } from "../lib/db";
+import { replaceCatalog, type CatalogSnapshot } from "./catalogRepository";
 
 export interface SyncResult {
   success: boolean;
@@ -13,50 +13,100 @@ export interface SyncResult {
 // from the nested product_variants payload, since that's the only place
 // they exist in this query shape.
 export async function syncCatalogFromSupabase(): Promise<SyncResult> {
-  const [categoriesResult, productsResult, paymentMethodsResult] = await Promise.all([
-    supabase.from('product_categories').select('id, name').order('name'),
-    supabase
-      .from('products')
-      .select(
-        `id, name, category_id, image_url, type,
+  const [categoriesResult, productsResult, paymentMethodsResult] =
+    await Promise.all([
+      supabase.from("product_categories").select("id, name").order("name"),
+      supabase
+        .from("products")
+        .select(
+          `id, name, category_id, image_url, type,
          product_variants!inner (
            id,
            price,
            sizes ( id, name, sort_order ),
            temperatures ( id, name, sort_order )
-         )`
-      )
-      .eq('is_visible', true)
-      .is('archived_at', null)
-      .gt('product_variants.price', 0)
-      .order('name'),
-    supabase.from('payment_methods').select('id, name, is_enabled').eq('is_enabled', true).order('name'),
-  ]);
+         )`,
+        )
+        .eq("is_visible", true)
+        .is("archived_at", null)
+        .gt("product_variants.price", 0)
+        .order("name"),
+      supabase
+        .from("payment_methods")
+        .select("id, name, is_enabled")
+        .eq("is_enabled", true)
+        .order("name"),
+    ]);
 
-  if (categoriesResult.error || productsResult.error || paymentMethodsResult.error) {
+  if (
+    categoriesResult.error ||
+    productsResult.error ||
+    paymentMethodsResult.error
+  ) {
     const error =
       categoriesResult.error?.message ??
       productsResult.error?.message ??
       paymentMethodsResult.error?.message ??
-      'Unknown catalog sync error';
-    console.error('Catalog sync failed:', error);
+      "Unknown catalog sync error";
+    console.error("Catalog sync failed:", error);
     return { success: false, error };
   }
 
-  const sizesMap = new Map<string, { id: string; name: string; sort_order: number }>();
-  const temperaturesMap = new Map<string, { id: string; name: string; sort_order: number }>();
-  const variants: CatalogSnapshot['variants'] = [];
+  // Soft-warning availability. Separate query (views don't embed in the
+  // nested products select). Any failure leaves servings NULL = "unknown /
+  // never warn" and must never fail the catalog sync itself.
+  const availability = new Map<
+    string,
+    { dineIn: number | null; takeOut: number | null }
+  >();
+  try {
+    const { data, error } = await supabase
+      .from("variant_availability")
+      .select("variant_id, servings_dine_in, servings_take_out");
+    if (error) {
+      console.warn(
+        "Availability fetch failed, warnings disabled this sync:",
+        error.message,
+      );
+    } else {
+      const toInt = (n: unknown): number | null =>
+        n === null || n === undefined || Number.isNaN(Number(n))
+          ? null
+          : Math.floor(Number(n));
+      for (const row of data ?? []) {
+        availability.set(row.variant_id, {
+          dineIn: toInt(row.servings_dine_in),
+          takeOut: toInt(row.servings_take_out),
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("Availability fetch threw, warnings disabled this sync:", e);
+  }
+
+  const sizesMap = new Map<
+    string,
+    { id: string; name: string; sort_order: number }
+  >();
+  const temperaturesMap = new Map<
+    string,
+    { id: string; name: string; sort_order: number }
+  >();
+  const variants: CatalogSnapshot["variants"] = [];
 
   for (const p of productsResult.data ?? []) {
     for (const v of (p as any).product_variants ?? []) {
       if (v.sizes) sizesMap.set(v.sizes.id, v.sizes);
-      if (v.temperatures) temperaturesMap.set(v.temperatures.id, v.temperatures);
+      if (v.temperatures)
+        temperaturesMap.set(v.temperatures.id, v.temperatures);
       variants.push({
         id: v.id,
         product_id: p.id,
         size_id: v.sizes?.id ?? null,
         temperature_id: v.temperatures?.id ?? null,
         price: v.price,
+        servings_dine_in: availability.get(v.id)?.dineIn ?? null,
+        servings_take_out: availability.get(v.id)?.takeOut ?? null,
       });
     }
   }
@@ -82,7 +132,7 @@ export async function syncCatalogFromSupabase(): Promise<SyncResult> {
   await db.runAsync(
     `INSERT INTO meta (key, value) VALUES ('last_catalog_sync_at', ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-    [new Date().toISOString()]
+    [new Date().toISOString()],
   );
   return { success: true };
 }

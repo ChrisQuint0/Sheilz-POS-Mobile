@@ -24,6 +24,10 @@ import {
   BORDER_RADIUS,
 } from "../../constants/theme";
 import AppText from "../ui/AppText";
+import {
+  getCartQtyForVariant,
+  getStockState,
+} from "../../services/stockStatus";
 
 interface ProductOptionModalProps {
   visible: boolean;
@@ -57,7 +61,7 @@ export default function ProductOptionModal({
   item,
   onClose,
 }: ProductOptionModalProps) {
-  const { addToCart, showToast } = usePOSStore(); // ADD THIS BACK
+  const { addToCart, showToast, cart } = usePOSStore(); // ADD THIS BACK
   const insets = useSafeAreaInsets();
   const [selectedSizeId, setSelectedSizeId] = useState<string | null>(null);
   const [selectedTempId, setSelectedTempId] = useState<string | null>(null);
@@ -135,6 +139,19 @@ export default function ProductOptionModal({
   const currentPrice = selectedVariant ? selectedVariant.price : null;
   const isValid = selectedVariant !== null;
 
+  // Soft out-of-stock warning. Re-evaluates whenever the variant, the
+  // Dine-In/Take-Out toggle, or the quantity changes. Counts what's already
+  // in the cart for this variant so the total is checked, not just this add.
+  const inCartQty = selectedVariant
+    ? getCartQtyForVariant(cart, item.id, selectedVariant)
+    : 0;
+  const isOut =
+    getStockState(
+      selectedVariant,
+      itemOrderType === "Take-Out",
+      inCartQty + quantity,
+    ) === "out";
+
   const handleAdd = () => {
     if (isValid && selectedVariant) {
       addToCart(
@@ -146,6 +163,7 @@ export default function ProductOptionModal({
         selectedVariant.price,
         quantity,
         itemOrderType === "Take-Out", // NEW — usesPackaging
+        isOut, // stockWarning
       );
       showToast(`Added ${quantity}x ${item.name} to order`);
       handleClose();
@@ -346,17 +364,33 @@ export default function ProductOptionModal({
             </View>
           </View>
 
+          {/* Soft out-of-stock warning (never blocks adding) */}
+          {isOut && (
+            <View style={styles.stockBanner}>
+              <Ionicons name="warning-outline" size={16} color="#B26A00" />
+              <AppText style={styles.stockBannerText}>
+                May be out of stock, as of last sync. You can still add it.
+              </AppText>
+            </View>
+          )}
+
           {/* Footer */}
           <View style={styles.footer}>
             <AppText style={styles.price}>
               {currentPrice ? `₱${totalPrice.toFixed(2)}` : "Select options"}
             </AppText>
             <TouchableOpacity
-              style={[styles.addBtn, !isValid && styles.addBtnDisabled]}
+              style={[
+                styles.addBtn,
+                isOut && styles.addBtnWarning,
+                !isValid && styles.addBtnDisabled,
+              ]}
               disabled={!isValid}
               onPress={handleAdd}
             >
-              <AppText style={styles.addBtnText}>Add to Order</AppText>
+              <AppText style={styles.addBtnText}>
+                {isOut ? "Add anyway" : "Add to Order"}
+              </AppText>
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -484,6 +518,22 @@ const styles = StyleSheet.create({
   },
   addBtnDisabled: {
     backgroundColor: COLORS.stone300,
+  },
+  addBtnWarning: {
+    backgroundColor: COLORS.primary,
+  },
+  stockBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: SPACING.sm,
+    borderRadius: BORDER_RADIUS.sm,
+    marginBottom: SPACING.sm,
+    gap: SPACING.xs,
+  },
+  stockBannerText: {
+    flex: 1,
+    color: COLORS.textLight,
+    fontSize: TYPOGRAPHY.sizes.sm,
   },
   addBtnText: {
     color: COLORS.surface,
