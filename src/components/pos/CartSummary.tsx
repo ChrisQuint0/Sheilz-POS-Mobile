@@ -10,10 +10,15 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  getCartQtyForVariant,
+  getStockState,
+} from "../../services/stockStatus";
+import {
   getCartTotal,
   getDiscountedUnitPrice,
   usePOSStore,
   PaymentMethod,
+  type CartItem,
 } from "../../store/usePOSStore";
 import { useSyncStore } from "../../store/useSyncStore";
 import {
@@ -76,6 +81,29 @@ export default function CartSummary({
   }, [hydrateActiveReward]);
 
   const cartTotal = getCartTotal(cart, pwdSeniorDiscountEnabled);
+
+  const handleIncrement = (line: CartItem) => {
+    const variant = line.item.variants.find(
+      (v) =>
+        (v.size?.name ?? null) === (line.options?.size ?? null) &&
+        (v.temperature?.name ?? null) === (line.options?.temp ?? null),
+    );
+    const out = variant
+      ? getStockState(
+          variant,
+          line.usesPackaging !== false,
+          getCartQtyForVariant(cart, line.item.id, variant) + 1,
+        ) === "out"
+      : false;
+    addToCart(
+      line.item,
+      line.options,
+      line.unitPrice,
+      1,
+      line.usesPackaging,
+      out,
+    );
+  };
 
   const handleChargeClick = () => {
     setIsPaymentModalVisible(true);
@@ -172,6 +200,18 @@ export default function CartSummary({
                         .join(" • ")}
                     </AppText>
                   )}
+                  {item.stockWarning && (
+                    <View style={styles.stockWarnBadge}>
+                      <Ionicons
+                        name="warning-outline"
+                        size={12}
+                        color={COLORS.primary}
+                      />
+                      <AppText style={styles.stockWarnText}>
+                        May be out of stock
+                      </AppText>
+                    </View>
+                  )}
                   {item.isRedemption && (
                     <View style={styles.redeemedBadge}>
                       <Ionicons name="gift" size={12} color={COLORS.primary} />
@@ -245,9 +285,7 @@ export default function CartSummary({
                       {item.quantity}
                     </AppText>
                     <TouchableOpacity
-                      onPress={() =>
-                        addToCart(item.item, item.options, item.unitPrice)
-                      }
+                      onPress={() => handleIncrement(item)}
                       style={styles.actionBtn}
                     >
                       <Ionicons name="add" size={18} color={COLORS.textLight} />
@@ -435,6 +473,21 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.md,
     fontWeight: TYPOGRAPHY.weights.bold,
     color: COLORS.roseDeep,
+  },
+  stockWarnBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 4,
+    alignSelf: "flex-start",
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: BORDER_RADIUS.sm,
+  },
+  stockWarnText: {
+    fontSize: 10,
+    fontWeight: TYPOGRAPHY.weights.bold,
+    color: COLORS.textLight,
   },
   redeemedBadge: {
     flexDirection: "row",

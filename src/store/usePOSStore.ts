@@ -1,13 +1,30 @@
-import { create } from 'zustand';
-import { supabase } from '../lib/supabase';
-import { getDB } from '../lib/db';
-import { createOrder, getOrderRedemptionMeta, updateOrderStatus as updateOrderStatusInDb, listOrders } from '../services/orderRepository';
-import { syncOrderImmediately } from '../services/syncService';
-import { getLoyaltyProgram, type LoyaltyProgram } from '../services/customerRepository';
-import { insertRedemptionLogs, isFreeItemReward } from '../services/loyaltyService';
-import { useSyncStore } from './useSyncStore';
-import { getPaymongoEnabled, setPaymongoEnabled } from '../services/settingsRepository';
-
+import { create } from "zustand";
+import { supabase } from "../lib/supabase";
+import { getDB } from "../lib/db";
+import {
+  createOrder,
+  getOrderRedemptionMeta,
+  updateOrderStatus as updateOrderStatusInDb,
+  listOrders,
+} from "../services/orderRepository";
+import { syncOrderImmediately } from "../services/syncService";
+import {
+  getLoyaltyProgram,
+  type LoyaltyProgram,
+} from "../services/customerRepository";
+import {
+  insertRedemptionLogs,
+  isFreeItemReward,
+} from "../services/loyaltyService";
+import { useSyncStore } from "./useSyncStore";
+import {
+  getPaymongoEnabled,
+  setPaymongoEnabled,
+} from "../services/settingsRepository";
+import {
+  getCartQtyForVariant,
+  getStockState,
+} from "../services/stockStatus";
 
 export interface ActiveCustomer {
   id: number;
@@ -32,6 +49,10 @@ export interface ProductTemperatureOption {
 export interface ProductVariant {
   id: string;
   price: number;
+  // Servings left per the last catalog sync (Supabase variant_availability).
+  // null = no recipe / unknown, treated as unlimited (never warns).
+  servingsDineIn: number | null;
+  servingsTakeOut: number | null;
   size: ProductSizeOption | null;
   temperature: ProductTemperatureOption | null;
 }
@@ -81,29 +102,45 @@ export interface CartItem {
   redeemedDiscount?: number;
   preRedemptionUnitPrice?: number;
   usesPackaging?: boolean; // NEW — per-line Dine-In/Take-Out packaging choice
+  // In-memory only (not persisted to SQLite/Supabase in v1): set when the
+  // line was added past an out-of-stock warning. Reopened tickets lose it.
+  stockWarning?: boolean;
 }
 
 export const PWD_SENIOR_DISCOUNT_RATE = 0.2;
 
-export type OrderType = 'Dine-In' | 'Take-Out';
+export type OrderType = "Dine-In" | "Take-Out";
 
-export function getDiscountedUnitPrice(item: CartItem, pwdSeniorDiscountEnabled: boolean): number {
+export function getDiscountedUnitPrice(
+  item: CartItem,
+  pwdSeniorDiscountEnabled: boolean,
+): number {
   if (!pwdSeniorDiscountEnabled || item.isRedemption) {
     return item.unitPrice;
   }
 
-  return Math.round(item.unitPrice * (1 - PWD_SENIOR_DISCOUNT_RATE) * 100) / 100;
+  return (
+    Math.round(item.unitPrice * (1 - PWD_SENIOR_DISCOUNT_RATE) * 100) / 100
+  );
 }
 
-export function getCartTotal(cart: CartItem[], pwdSeniorDiscountEnabled: boolean): number {
+export function getCartTotal(
+  cart: CartItem[],
+  pwdSeniorDiscountEnabled: boolean,
+): number {
   return cart.reduce(
     (sum, item) =>
-      sum + getDiscountedUnitPrice(item, pwdSeniorDiscountEnabled) * item.quantity,
+      sum +
+      getDiscountedUnitPrice(item, pwdSeniorDiscountEnabled) * item.quantity,
     0,
   );
 }
 
-export type OrderStatus = 'Current' | 'Completed' | 'Void (Not Made)' | 'Void (Consumed)';
+export type OrderStatus =
+  | "Current"
+  | "Completed"
+  | "Void (Not Made)"
+  | "Void (Consumed)";
 
 export interface Order {
   id: string;
@@ -116,7 +153,7 @@ export interface Order {
   timestamp: string;
   cashTendered?: number;
   changeAmount?: number;
-  isPaid?: boolean;  // NEW
+  isPaid?: boolean; // NEW
   orderType?: OrderType; // NEW
 }
 
@@ -135,7 +172,7 @@ interface POSState {
   userRole: string | null;
   login: (profile: AuthProfile) => void;
   logout: () => void;
-  
+
   activeCustomer: ActiveCustomer | null;
   setActiveCustomer: (customer: ActiveCustomer) => void;
   clearActiveCustomer: () => void;
@@ -144,7 +181,6 @@ interface POSState {
   hydrateActiveReward: () => Promise<void>;
   redeemCartLine: (cartItemId: string) => void;
   undoRedemption: (cartItemId: string) => void;
-
 
   // Navigation & Filtering
   activeCategory: string;
@@ -161,7 +197,14 @@ interface POSState {
 
   // Cart
   cart: CartItem[];
-  addToCart: (item: MenuItem, options?: CartItemOptions, unitPrice?: number, quantity?: number, usesPackaging?: boolean) => void;
+  addToCart: (
+    item: MenuItem,
+    options?: CartItemOptions,
+    unitPrice?: number,
+    quantity?: number,
+    usesPackaging?: boolean,
+    stockWarning?: boolean,
+  ) => void;
   removeFromCart: (cartItemId: string) => void;
   decrementCartItem: (cartItemId: string) => void;
   clearCart: () => void;
@@ -171,8 +214,7 @@ interface POSState {
   paymongoEnabled: boolean;
   hydratePaymongoEnabled: () => Promise<void>;
   setPaymongoEnabledPref: (enabled: boolean) => Promise<void>;
-  
-  
+
   // Order Generation
   orderSequence: number;
   lastOrderDate: string;
@@ -184,7 +226,7 @@ interface POSState {
   // first order collides with any existing YYYYMMDD-001 in SQLite
   // (UNIQUE constraint on orders.order_number).
   initOrderSequence: () => Promise<void>;
-  
+
   // User Profile
   cashierName: string;
   setCashierName: (name: string) => void;
@@ -193,7 +235,7 @@ interface POSState {
   orders: Order[];
   setOrders: (orders: Order[]) => void;
   hydrateOrders: () => Promise<void>;
-    placeOrder: (
+  placeOrder: (
     paymentMethod: string,
     orderNumber: string,
     customerName?: string,
@@ -209,7 +251,7 @@ interface POSState {
 
 const getTodayString = () => {
   const date = new Date();
-  return `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+  return `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, "0")}${date.getDate().toString().padStart(2, "0")}`;
 };
 
 export const usePOSStore = create<POSState>((set, get) => ({
@@ -218,30 +260,31 @@ export const usePOSStore = create<POSState>((set, get) => ({
   isAuthenticated: false,
   userId: null,
   userRole: null,
-  login: (profile) => set({
-    isAuthenticated: true,
-    userId: profile.id,
-    userRole: profile.role,
-    cashierName: profile.display_name,
-  }),
+  login: (profile) =>
+    set({
+      isAuthenticated: true,
+      userId: profile.id,
+      userRole: profile.role,
+      cashierName: profile.display_name,
+    }),
   logout: () => {
     supabase.auth.signOut();
     set({ isAuthenticated: false, userId: null, userRole: null });
   },
 
-  activeCategory: 'All',
+  activeCategory: "All",
   setActiveCategory: (category) => set({ activeCategory: category }),
-  
-  searchQuery: '',
+
+  searchQuery: "",
   setSearchQuery: (query) => set({ searchQuery: query }),
-  
+
   isSearchActive: false,
   setIsSearchActive: (active) => set({ isSearchActive: active }),
 
   toastMessage: null,
   showToast: (message) => set({ toastMessage: message }),
   hideToast: () => set({ toastMessage: null }),
-  
+
   activeCustomer: null,
   setActiveCustomer: (customer) => set({ activeCustomer: customer }),
   clearActiveCustomer: () => set({ activeCustomer: null }),
@@ -251,59 +294,98 @@ export const usePOSStore = create<POSState>((set, get) => ({
     const reward = await getLoyaltyProgram();
     set({ activeReward: reward });
   },
-  redeemCartLine: (cartItemId) => set((state) => {
-    const reward = state.activeReward;
-    const line = state.cart.find((c) => c.cartItemId === cartItemId);
-    if (!reward || !line || line.isRedemption) return state;
+  redeemCartLine: (cartItemId) =>
+    set((state) => {
+      const reward = state.activeReward;
+      const line = state.cart.find((c) => c.cartItemId === cartItemId);
+      if (!reward || !line || line.isRedemption) return state;
 
-    const freeItem = isFreeItemReward(reward);
-    const discountAmount = freeItem ? 0 : Math.min(line.unitPrice, reward.discount_amount ?? 0);
-    const redeemedLine: CartItem = {
-      ...line,
-      quantity: 1,
-      isRedemption: true,
-      preRedemptionUnitPrice: line.unitPrice,
-      redeemedDiscount: discountAmount,
-      unitPrice: freeItem ? 0 : line.unitPrice - discountAmount,
-    };
-
-    if (line.quantity > 1) {
-      return {
-        cart: state.cart
-          .map((c) => c.cartItemId === cartItemId ? { ...c, quantity: c.quantity - 1 } : c)
-          .concat({ ...redeemedLine, cartItemId: `${cartItemId}-redeemed-${Date.now()}` }),
+      const freeItem = isFreeItemReward(reward);
+      const discountAmount = freeItem
+        ? 0
+        : Math.min(line.unitPrice, reward.discount_amount ?? 0);
+      const redeemedLine: CartItem = {
+        ...line,
+        quantity: 1,
+        isRedemption: true,
+        preRedemptionUnitPrice: line.unitPrice,
+        redeemedDiscount: discountAmount,
+        unitPrice: freeItem ? 0 : line.unitPrice - discountAmount,
       };
-    }
-    return {
-      cart: state.cart.map((c) => c.cartItemId === cartItemId ? redeemedLine : c),
-    };
-  }),
-  undoRedemption: (cartItemId) => set((state) => ({
-    cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
-  })),
 
-  cart: [],
-  addToCart: (item, options, unitPrice, quantity = 1, usesPackaging = true) => set((state) => {
-    // Generate unique ID based on options. Redemption items get a distinct
-    // suffix so a paid and a free line of the same product (same size/temp)
-    // don't collapse into one cart row.
-    const optionStr = options
-      ? `${options.size || ''}-${options.temp || ''}-${options.addon ? 'addon' : ''}-${usesPackaging ? 'pkg' : 'nopkg'}`
-      : `no-options-${usesPackaging ? 'pkg' : 'nopkg'}`;
-    const cartItemId = `${item.id}-${optionStr}`;
-    const price = unitPrice !== undefined ? unitPrice : item.price;
-
-    const existing = state.cart.find((c) => c.cartItemId === cartItemId);
-    if (existing) {
+      if (line.quantity > 1) {
+        return {
+          cart: state.cart
+            .map((c) =>
+              c.cartItemId === cartItemId
+                ? { ...c, quantity: c.quantity - 1 }
+                : c,
+            )
+            .concat({
+              ...redeemedLine,
+              cartItemId: `${cartItemId}-redeemed-${Date.now()}`,
+            }),
+        };
+      }
       return {
         cart: state.cart.map((c) =>
-          c.cartItemId === cartItemId ? { ...c, quantity: c.quantity + quantity } : c
+          c.cartItemId === cartItemId ? redeemedLine : c,
         ),
       };
-    }
-    return { cart: [...state.cart, { cartItemId, item, options, unitPrice: price, quantity, usesPackaging }] };
-  }),
+    }),
+  undoRedemption: (cartItemId) =>
+    set((state) => ({
+      cart: state.cart.filter((c) => c.cartItemId !== cartItemId),
+    })),
 
+  cart: [],
+  addToCart: (
+    item,
+    options,
+    unitPrice,
+    quantity = 1,
+    usesPackaging = true,
+    stockWarning = false,
+  ) =>
+    set((state) => {
+      // Generate unique ID based on options. Redemption items get a distinct
+      // suffix so a paid and a free line of the same product (same size/temp)
+      // don't collapse into one cart row.
+      const optionStr = options
+        ? `${options.size || ""}-${options.temp || ""}-${options.addon ? "addon" : ""}-${usesPackaging ? "pkg" : "nopkg"}`
+        : `no-options-${usesPackaging ? "pkg" : "nopkg"}`;
+      const cartItemId = `${item.id}-${optionStr}`;
+      const price = unitPrice !== undefined ? unitPrice : item.price;
+
+      const existing = state.cart.find((c) => c.cartItemId === cartItemId);
+      if (existing) {
+        return {
+          cart: state.cart.map((c) =>
+            c.cartItemId === cartItemId
+              ? {
+                  ...c,
+                  quantity: c.quantity + quantity,
+                  stockWarning: c.stockWarning || stockWarning,
+                }
+              : c,
+          ),
+        };
+      }
+      return {
+        cart: [
+          ...state.cart,
+          {
+            cartItemId,
+            item,
+            options,
+            unitPrice: price,
+            quantity,
+            usesPackaging,
+            stockWarning,
+          },
+        ],
+      };
+    }),
 
   paymongoEnabled: false,
   hydratePaymongoEnabled: async () => {
@@ -315,33 +397,65 @@ export const usePOSStore = create<POSState>((set, get) => ({
     set({ paymongoEnabled: enabled });
   },
 
-  removeFromCart: (cartItemId) => set((state) => {
-    const cart = state.cart.filter((c) => c.cartItemId !== cartItemId);
-    return { cart, ...(cart.length === 0 ? { pwdSeniorDiscountEnabled: false } : {}) };
-  }),
-
-  decrementCartItem: (cartItemId) => set((state) => {
-    const existing = state.cart.find((c) => c.cartItemId === cartItemId);
-    if (existing && existing.quantity > 1) {
+  removeFromCart: (cartItemId) =>
+    set((state) => {
+      const cart = state.cart.filter((c) => c.cartItemId !== cartItemId);
       return {
-        cart: state.cart.map((c) =>
-          c.cartItemId === cartItemId ? { ...c, quantity: c.quantity - 1 } : c
-        ),
+        cart,
+        ...(cart.length === 0 ? { pwdSeniorDiscountEnabled: false } : {}),
       };
-    }
-    // If quantity is 1, remove it
-    const cart = state.cart.filter((c) => c.cartItemId !== cartItemId);
-    return { cart, ...(cart.length === 0 ? { pwdSeniorDiscountEnabled: false } : {}) };
-  }),
+    }),
 
-  clearCart: () => set({ cart: [], activeCustomer: null, pwdSeniorDiscountEnabled: false}),
+  decrementCartItem: (cartItemId) =>
+    set((state) => {
+      const existing = state.cart.find((c) => c.cartItemId === cartItemId);
+      if (!existing) return state;
+
+      const remainingCart = state.cart.flatMap((c) => {
+        if (c.cartItemId !== cartItemId) return [c];
+        return c.quantity > 1 ? [{ ...c, quantity: c.quantity - 1 }] : [];
+      });
+      const variant = existing.item.variants.find(
+        (v) =>
+          (v.size?.name ?? null) === (existing.options?.size ?? null) &&
+          (v.temperature?.name ?? null) === (existing.options?.temp ?? null),
+      );
+      const requestedQty = variant
+        ? getCartQtyForVariant(remainingCart, existing.item.id, variant)
+        : 0;
+      const cart = variant
+        ? remainingCart.map((c) => {
+            const isSameVariant =
+              c.item.id === existing.item.id &&
+              (c.options?.size ?? null) === (variant.size?.name ?? null) &&
+              (c.options?.temp ?? null) ===
+                (variant.temperature?.name ?? null);
+            if (!isSameVariant) return c;
+
+            return {
+              ...c,
+              stockWarning:
+                getStockState(variant, c.usesPackaging !== false, requestedQty) ===
+                "out",
+            };
+          })
+        : remainingCart;
+
+      return {
+        cart,
+        ...(cart.length === 0 ? { pwdSeniorDiscountEnabled: false } : {}),
+      };
+    }),
+
+  clearCart: () =>
+    set({ cart: [], activeCustomer: null, pwdSeniorDiscountEnabled: false }),
   pwdSeniorDiscountEnabled: false,
-  setPwdSeniorDiscountEnabled: (enabled) => set({ pwdSeniorDiscountEnabled: enabled }),
-
+  setPwdSeniorDiscountEnabled: (enabled) =>
+    set({ pwdSeniorDiscountEnabled: enabled }),
 
   orderSequence: 1,
   lastOrderDate: getTodayString(),
-  
+
   generateOrderNumber: () => {
     const today = getTodayString();
     let currentSequence = get().orderSequence;
@@ -351,11 +465,11 @@ export const usePOSStore = create<POSState>((set, get) => ({
       currentSequence = 1;
     }
 
-    const orderNumber = `${today}-${currentSequence.toString().padStart(3, '0')}`;
+    const orderNumber = `${today}-${currentSequence.toString().padStart(3, "0")}`;
 
     set({
       orderSequence: currentSequence + 1,
-      lastOrderDate: today
+      lastOrderDate: today,
     });
 
     return orderNumber;
@@ -374,7 +488,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
          WHERE order_number LIKE ?
          ORDER BY order_number DESC
          LIMIT 1`,
-        `${prefix}%`
+        `${prefix}%`,
       );
       if (row?.order_number) {
         const lastSeq = parseInt(row.order_number.slice(prefix.length), 10);
@@ -390,15 +504,15 @@ export const usePOSStore = create<POSState>((set, get) => ({
       // falling back to 1, so a reinstalled device doesn't regenerate an
       // order_number another device already synced today.
       const { data: remoteRow, error } = await supabase
-        .from('orders')
-        .select('order_id')
-        .like('order_id', `${prefix}%`)
-        .order('order_id', { ascending: false })
+        .from("orders")
+        .select("order_id")
+        .like("order_id", `${prefix}%`)
+        .order("order_id", { ascending: false })
         .limit(1)
         .maybeSingle();
 
       if (error) {
-        console.error('initOrderSequence remote fallback failed:', error);
+        console.error("initOrderSequence remote fallback failed:", error);
         return; // fall through to defaults (orderSequence: 1)
       }
       if (remoteRow?.order_id) {
@@ -414,11 +528,11 @@ export const usePOSStore = create<POSState>((set, get) => ({
       // blocking app boot. The first generated number may still
       // collide, but a single UNIQUE failure is recoverable; a stuck
       // splash is not.
-      console.error('initOrderSequence failed:', err);
+      console.error("initOrderSequence failed:", err);
     }
   },
 
-  cashierName: 'Joshua T.',
+  cashierName: "Joshua T.",
   setCashierName: (name) => set({ cashierName: name }),
 
   orders: [],
@@ -427,77 +541,94 @@ export const usePOSStore = create<POSState>((set, get) => ({
     const orders = await listOrders();
     set({ orders });
   },
-  placeOrder: async (paymentMethod, orderNumber, customerName, paymentDetail) => {
-  const state = get();
-  const hasRedemptionLine = state.cart.some((c) => c.isRedemption === true);
-  if (hasRedemptionLine && (!state.activeCustomer || !state.activeReward)) {
-    throw new Error('A redeemed item requires an attached customer and an active reward.');
-  }
-
-  const resolvedCustomerName = state.activeCustomer
-    ? [state.activeCustomer.first_name, state.activeCustomer.last_name]
-        .filter(Boolean)
-        .join(' ') || undefined
-    : customerName;
-
-  const orderCart = state.cart.map((item) => ({
-    ...item,
-    unitPrice: getDiscountedUnitPrice(item, state.pwdSeniorDiscountEnabled),
-  }));
-
-  // Order-level order_type is derived, not chosen directly — "any-dine-in":
-  // if any line item was marked dine-in (usesPackaging === false), the whole
-  // order is tagged Dine-In for reporting purposes, even if other lines on
-  // the same order were take-out.
-  const derivedOrderType: OrderType = orderCart.some((c) => c.usesPackaging === false)
-    ? 'Dine-In'
-    : 'Take-Out';
-
-  const newOrder = await createOrder(
-    orderCart,
-    orderNumber,
+  placeOrder: async (
     paymentMethod,
-    state.userId,
-    state.cashierName,
-    resolvedCustomerName,
-    state.activeCustomer?.id ?? null,
-    hasRedemptionLine,
-    hasRedemptionLine ? state.activeReward!.id : null,
-    hasRedemptionLine ? state.activeReward!.points_required : null,
-    paymentDetail?.cashTendered ?? 0,
-    paymentDetail?.changeAmount ?? 0,
-    paymentDetail?.id,
-    paymentDetail?.isPaid ?? false,
-    derivedOrderType, // NEW — replaces state.orderType ?? 'Take-Out'
-  );
+    orderNumber,
+    customerName,
+    paymentDetail,
+  ) => {
+    const state = get();
+    const hasRedemptionLine = state.cart.some((c) => c.isRedemption === true);
+    if (hasRedemptionLine && (!state.activeCustomer || !state.activeReward)) {
+      throw new Error(
+        "A redeemed item requires an attached customer and an active reward.",
+      );
+    }
 
-  set((s) => ({
-    orders: [newOrder, ...s.orders],
-    cart: [],
-    activeCustomer: null,
-    pwdSeniorDiscountEnabled: false,
-  }));
-},
+    const resolvedCustomerName = state.activeCustomer
+      ? [state.activeCustomer.first_name, state.activeCustomer.last_name]
+          .filter(Boolean)
+          .join(" ") || undefined
+      : customerName;
+
+    const orderCart = state.cart.map((item) => ({
+      ...item,
+      unitPrice: getDiscountedUnitPrice(item, state.pwdSeniorDiscountEnabled),
+    }));
+
+    // Order-level order_type is derived, not chosen directly — "any-dine-in":
+    // if any line item was marked dine-in (usesPackaging === false), the whole
+    // order is tagged Dine-In for reporting purposes, even if other lines on
+    // the same order were take-out.
+    const derivedOrderType: OrderType = orderCart.some(
+      (c) => c.usesPackaging === false,
+    )
+      ? "Dine-In"
+      : "Take-Out";
+
+    const newOrder = await createOrder(
+      orderCart,
+      orderNumber,
+      paymentMethod,
+      state.userId,
+      state.cashierName,
+      resolvedCustomerName,
+      state.activeCustomer?.id ?? null,
+      hasRedemptionLine,
+      hasRedemptionLine ? state.activeReward!.id : null,
+      hasRedemptionLine ? state.activeReward!.points_required : null,
+      paymentDetail?.cashTendered ?? 0,
+      paymentDetail?.changeAmount ?? 0,
+      paymentDetail?.id,
+      paymentDetail?.isPaid ?? false,
+      derivedOrderType, // NEW — replaces state.orderType ?? 'Take-Out'
+    );
+
+    set((s) => ({
+      orders: [newOrder, ...s.orders],
+      cart: [],
+      activeCustomer: null,
+      pwdSeniorDiscountEnabled: false,
+    }));
+  },
   updateOrderStatus: async (orderId, status) => {
     const meta = await getOrderRedemptionMeta(orderId);
-    if (status === 'Completed' && meta?.hasRedemption) {
+    if (status === "Completed" && meta?.hasRedemption) {
       if (!useSyncStore.getState().isNetworkConnected) {
         throw new Error(
-          'Completing a redeemed order requires an internet connection. Please connect and try again.',
+          "Completing a redeemed order requires an internet connection. Please connect and try again.",
         );
       }
-      if (meta.customerId == null || meta.rewardId == null || meta.pointsRequired == null) {
+      if (
+        meta.customerId == null ||
+        meta.rewardId == null ||
+        meta.pointsRequired == null
+      ) {
         throw new Error(
-          'This order is missing loyalty redemption details and cannot be completed automatically.',
+          "This order is missing loyalty redemption details and cannot be completed automatically.",
         );
       }
-      const previousStatus = get().orders.find((o) => o.id === orderId)?.status ?? 'Current';
+      const previousStatus =
+        get().orders.find((o) => o.id === orderId)?.status ?? "Current";
       await updateOrderStatusInDb(orderId, status);
       const syncStartedAt = Date.now();
       const syncResult = await syncOrderImmediately(orderId);
       if (!syncResult.success) {
         await updateOrderStatusInDb(orderId, previousStatus);
-        throw new Error(syncResult.error ?? 'Failed to sync redeemed order. Please try again.');
+        throw new Error(
+          syncResult.error ??
+            "Failed to sync redeemed order. Please try again.",
+        );
       }
       useSyncStore.getState().recordSyncSuccess(1, Date.now() - syncStartedAt);
       const logResult = await insertRedemptionLogs(
@@ -509,7 +640,7 @@ export const usePOSStore = create<POSState>((set, get) => ({
       );
       if (!logResult.success) {
         get().showToast(
-          `Order completed, but the loyalty deduction failed to save: ${logResult.error ?? 'unknown error'}. Please inform your manager.`,
+          `Order completed, but the loyalty deduction failed to save: ${logResult.error ?? "unknown error"}. Please inform your manager.`,
         );
       }
     } else {
@@ -518,16 +649,25 @@ export const usePOSStore = create<POSState>((set, get) => ({
     set((state) => ({
       orders: state.orders.map((o) =>
         o.id === orderId
-          ? { ...o, status, ...(status === 'Completed' ? { isPaid: true } : {}) }
+          ? {
+              ...o,
+              status,
+              ...(status === "Completed" ? { isPaid: true } : {}),
+            }
           : o,
       ),
     }));
 
-    if (status !== 'Current') {
-      useSyncStore.getState().hydrateStats()
+    if (status !== "Current") {
+      useSyncStore
+        .getState()
+        .hydrateStats()
         .then(() => useSyncStore.getState().syncNow())
         .catch((err) =>
-          console.warn('Background sync after status change failed to start:', err),
+          console.warn(
+            "Background sync after status change failed to start:",
+            err,
+          ),
         );
     }
   },

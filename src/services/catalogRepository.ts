@@ -1,17 +1,30 @@
-import { getDB } from '../lib/db';
-import type { MenuItem, ProductVariant, ProductCategory, PaymentMethod } from '../store/usePOSStore';
+import { getDB } from "../lib/db";
+import type {
+  MenuItem,
+  ProductVariant,
+  ProductCategory,
+  PaymentMethod,
+} from "../store/usePOSStore";
 
 export interface CatalogSnapshot {
   categories: { id: string; name: string }[];
   sizes: { id: string; name: string; sort_order: number }[];
   temperatures: { id: string; name: string; sort_order: number }[];
-  products: { id: string; name: string; category_id: string; image_url: string | null; type: string }[];
+  products: {
+    id: string;
+    name: string;
+    category_id: string;
+    image_url: string | null;
+    type: string;
+  }[];
   variants: {
     id: string;
     product_id: string;
     size_id: string | null;
     temperature_id: string | null;
     price: number;
+    servings_dine_in: number | null;
+    servings_take_out: number | null;
   }[];
   paymentMethods: { id: string; name: string; is_enabled: boolean }[];
 }
@@ -19,7 +32,7 @@ export interface CatalogSnapshot {
 export async function getLastCatalogSyncAt(): Promise<string | null> {
   const db = await getDB();
   const row = await db.getFirstAsync<{ value: string }>(
-    `SELECT value FROM meta WHERE key = 'last_catalog_sync_at'`
+    `SELECT value FROM meta WHERE key = 'last_catalog_sync_at'`,
   );
   return row?.value ?? null;
 }
@@ -27,16 +40,20 @@ export async function getLastCatalogSyncAt(): Promise<string | null> {
 export async function getCategories(): Promise<ProductCategory[]> {
   const db = await getDB();
   return db.getAllAsync<ProductCategory>(
-    `SELECT id, name FROM product_categories ORDER BY name`
+    `SELECT id, name FROM product_categories ORDER BY name`,
   );
 }
 
 export async function getPaymentMethods(): Promise<PaymentMethod[]> {
   const db = await getDB();
   const rows = await db.getAllAsync<any>(
-    `SELECT id, name, is_enabled FROM payment_methods WHERE is_enabled = 1 ORDER BY name`
+    `SELECT id, name, is_enabled FROM payment_methods WHERE is_enabled = 1 ORDER BY name`,
   );
-  return rows.map((r) => ({ id: r.id, name: r.name, is_enabled: !!r.is_enabled }));
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    is_enabled: !!r.is_enabled,
+  }));
 }
 
 export async function getProducts(): Promise<MenuItem[]> {
@@ -46,16 +63,17 @@ export async function getProducts(): Promise<MenuItem[]> {
     `SELECT p.id, p.name, p.category_id, p.image_url, p.type, c.name as category_name
      FROM products p
      LEFT JOIN product_categories c ON c.id = p.category_id
-     ORDER BY p.name`
+     ORDER BY p.name`,
   );
 
   const variantRows = await db.getAllAsync<any>(
     `SELECT v.id, v.product_id, v.price,
+            v.servings_dine_in, v.servings_take_out,
             s.id as size_id, s.name as size_name, s.sort_order as size_sort_order,
             t.id as temp_id, t.name as temp_name, t.sort_order as temp_sort_order
      FROM product_variants v
      LEFT JOIN sizes s ON s.id = v.size_id
-     LEFT JOIN temperatures t ON t.id = v.temperature_id`
+     LEFT JOIN temperatures t ON t.id = v.temperature_id`,
   );
 
   return productRows.map((p) => {
@@ -64,6 +82,8 @@ export async function getProducts(): Promise<MenuItem[]> {
       .map((v) => ({
         id: v.id,
         price: v.price,
+        servingsDineIn: v.servings_dine_in ?? null,
+        servingsTakeOut: v.servings_take_out ?? null,
         size: v.size_id
           ? { id: v.size_id, name: v.size_name, sort_order: v.size_sort_order }
           : null,
@@ -72,12 +92,13 @@ export async function getProducts(): Promise<MenuItem[]> {
           : null,
       }));
 
-    const lowestPrice = variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : 0;
+    const lowestPrice =
+      variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : 0;
 
     return {
       id: p.id,
       name: p.name,
-      category: p.category_name ?? '',
+      category: p.category_name ?? "",
       category_id: p.category_id,
       type: p.type,
       image: p.image_url,
@@ -102,36 +123,47 @@ export async function replaceCatalog(snapshot: CatalogSnapshot): Promise<void> {
     await txn.execAsync(`DELETE FROM payment_methods`);
 
     for (const c of snapshot.categories) {
-      await txn.runAsync(`INSERT INTO product_categories (id, name) VALUES (?, ?)`, [c.id, c.name]);
+      await txn.runAsync(
+        `INSERT INTO product_categories (id, name) VALUES (?, ?)`,
+        [c.id, c.name],
+      );
     }
     for (const s of snapshot.sizes) {
       await txn.runAsync(
         `INSERT INTO sizes (id, name, sort_order) VALUES (?, ?, ?)`,
-        [s.id, s.name, s.sort_order]
+        [s.id, s.name, s.sort_order],
       );
     }
     for (const t of snapshot.temperatures) {
       await txn.runAsync(
         `INSERT INTO temperatures (id, name, sort_order) VALUES (?, ?, ?)`,
-        [t.id, t.name, t.sort_order]
+        [t.id, t.name, t.sort_order],
       );
     }
     for (const p of snapshot.products) {
       await txn.runAsync(
         `INSERT INTO products (id, name, category_id, image_url, type) VALUES (?, ?, ?, ?, ?)`,
-        [p.id, p.name, p.category_id, p.image_url, p.type]
+        [p.id, p.name, p.category_id, p.image_url, p.type],
       );
     }
     for (const v of snapshot.variants) {
       await txn.runAsync(
-        `INSERT INTO product_variants (id, product_id, size_id, temperature_id, price) VALUES (?, ?, ?, ?, ?)`,
-        [v.id, v.product_id, v.size_id, v.temperature_id, v.price]
+        `INSERT INTO product_variants (id, product_id, size_id, temperature_id, price, servings_dine_in, servings_take_out) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          v.id,
+          v.product_id,
+          v.size_id,
+          v.temperature_id,
+          v.price,
+          v.servings_dine_in,
+          v.servings_take_out,
+        ],
       );
     }
     for (const pm of snapshot.paymentMethods) {
       await txn.runAsync(
         `INSERT INTO payment_methods (id, name, is_enabled) VALUES (?, ?, ?)`,
-        [pm.id, pm.name, pm.is_enabled ? 1 : 0]
+        [pm.id, pm.name, pm.is_enabled ? 1 : 0],
       );
     }
   });
